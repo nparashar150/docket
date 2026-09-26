@@ -165,3 +165,59 @@ final class WidgetOptionTests: XCTestCase {
         XCTAssertEqual(parse(original.joined(separator: ", ")), original)
     }
 }
+
+/// Whether an option means anything given the rest of the configuration.
+///
+/// An option that applies to one layout and not another is the same defect as
+/// one nothing reads: the control accepts a change and produces none.
+final class OptionApplicabilityTests: XCTestCase {
+
+    private func system(layout: String) -> WidgetConfig {
+        var config = WidgetConfig()
+        config.set("layout", .string(layout))
+        return config
+    }
+
+    func testTheChartAppliesToNumbersOnly() {
+        XCTAssertTrue(WidgetCatalog.applies("chart", to: system(layout: "numbers"), kind: .system))
+        XCTAssertFalse(WidgetCatalog.applies("chart", to: system(layout: "rings"), kind: .system))
+        XCTAssertFalse(WidgetCatalog.applies("chart", to: system(layout: "bars"), kind: .system))
+    }
+
+    /// The default layout is numbers, so an unconfigured widget offers it.
+    func testAnUnconfiguredWidgetStillOffersTheChart() {
+        XCTAssertTrue(WidgetCatalog.applies("chart", to: WidgetConfig(), kind: .system))
+    }
+
+    /// Only System Activity's chart is conditional. Network has charted and
+    /// uncharted variants with no layout key, so its own switch always means
+    /// something.
+    func testNetworksChartIsNotConditional() {
+        XCTAssertTrue(WidgetCatalog.applies("chart", to: WidgetConfig(), kind: .network))
+    }
+
+    /// Everything else is unconditional, and a rule added carelessly would
+    /// silently hide a working control.
+    func testNothingElseIsHiddenByAccident() {
+        for kind in WidgetKind.allCases {
+            for key in WidgetCatalog.configurableKeys(kind) where !(kind == .system && key == "chart") {
+                XCTAssertTrue(WidgetCatalog.applies(key, to: WidgetConfig(), kind: kind),
+                              "\(kind.rawValue).\(key) should not be conditional")
+            }
+        }
+    }
+
+    /// The catalog's own variant list has always implied this: it offers
+    /// Numbers and Numbers + graph, and no charted ring or bar.
+    func testTheVariantsNeverChartARingOrABar() {
+        guard let entry = WidgetCatalog.entry(.system) else { return XCTFail("no entry") }
+        for variant in entry.variants {
+            let layout = variant.overrides["layout"]
+            let charted = variant.overrides["chart"] == .bool(true)
+            if charted {
+                XCTAssertEqual(layout, .string("numbers"),
+                               "\(variant.title) charts a layout that cannot draw one")
+            }
+        }
+    }
+}
