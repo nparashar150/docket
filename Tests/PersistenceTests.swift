@@ -72,6 +72,52 @@ final class PersistenceTests: XCTestCase {
         XCTAssertTrue(try quarantinedFiles().isEmpty, "this is not a corrupt file")
     }
 
+    // MARK: Values it does not recognise
+
+    /// A misspelled or newer choice used to reject the whole file, so one bad
+    /// word cost every profile, widget and pinned app.
+    func testAnUnknownChoiceFallsBackInsteadOfRejectingTheFile() throws {
+        try write(#"{"version": 1, "customDock": {"position": "diagonal", "glass": "frobnicated"}}"#)
+        let state = store().load()
+        XCTAssertEqual(state.customDock.position, .bottom)
+        XCTAssertEqual(state.customDock.glass, .regular)
+        XCTAssertTrue(try quarantinedFiles().isEmpty,
+                      "a value we do not know is not a corrupt file")
+    }
+
+    /// An unreadable item is dropped on its own. Falling back would be worse
+    /// here: an unknown widget kind becoming a clock looks like configuration
+    /// rather than like a loss.
+    func testAnUnreadableItemIsDroppedAndTheProfileSurvives() throws {
+        let id = UUID()
+        try write("""
+        {"version": 1, "profiles": [{"id": "\(id.uuidString)", "name": "Everyday",
+          "kind": "customDock", "color": "blue", "scale": 0.5,
+          "items": [{"totally": "unrecognisable"}, {"alsoNot": 3}]}]}
+        """)
+        let state = store().load()
+        XCTAssertEqual(state.profiles.count, 1, "the profile survives its bad items")
+        XCTAssertEqual(state.profiles.first?.name, "Everyday")
+        XCTAssertTrue(state.profiles.first?.items.isEmpty == true)
+        XCTAssertTrue(try quarantinedFiles().isEmpty)
+    }
+
+    /// The good items either side of a bad one have to survive it, which is
+    /// what separates skipping an element from giving up on the array.
+    func testGoodItemsAroundABadOneAreKept() throws {
+        let id = UUID(), spacer = UUID()
+        try write("""
+        {"version": 1, "profiles": [{"id": "\(id.uuidString)", "name": "Everyday",
+          "kind": "customDock", "color": "blue", "scale": 0.5,
+          "items": [{"nonsense": true},
+                    {"spacer": {"_0": "\(spacer.uuidString)", "_1": "regular"}},
+                    {"more": "nonsense"}]}]}
+        """)
+        let state = store().load()
+        XCTAssertEqual(state.profiles.count, 1)
+        XCTAssertTrue(try quarantinedFiles().isEmpty)
+    }
+
     /// A key from a build that has since dropped it must not throw either.
     func testAnUnknownKeyIsIgnored() throws {
         try write(#"{"version": 1, "customDock": {"somethingRemovedLater": true}}"#)

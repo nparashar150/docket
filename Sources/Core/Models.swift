@@ -2,6 +2,30 @@ import Foundation
 
 // MARK: - Shelf placement & look
 
+/// A stored choice that survives a value it does not recognise.
+///
+/// Synthesized `Codable` throws on an unknown raw value, and one throw
+/// anywhere rejects the whole state file, which `Store.load()` answers by
+/// setting the file aside and starting from a first-run default. So a single
+/// misspelled word, or a downgrade to a build that predates one option, cost
+/// the user every profile, widget and pinned app.
+///
+/// Only for choices where falling back is honestly better than failing: an
+/// edge, a material, a colour. Deliberately NOT adopted by `WidgetKind`, where
+/// the nearest equivalent would silently turn somebody's widget into a clock.
+/// An unknown widget is dropped instead, which `DockItem` handles.
+public protocol LenientChoice: RawRepresentable, Codable where RawValue == String {
+    /// What an unrecognised value reads as.
+    static var fallback: Self { get }
+}
+
+public extension LenientChoice {
+    init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: raw) ?? Self.fallback
+    }
+}
+
 public enum DockSetup: String, Codable, Sendable, CaseIterable {
     /// Apple's Dock only. No shelf, so no widgets.
     case macOSDockOnly = "native"
@@ -393,6 +417,17 @@ public struct KeyCombo: Codable, Hashable, Sendable {
     }
 }
 
+/// Swallows one element of any shape.
+///
+/// An unkeyed container only advances when something is decoded from it, so
+/// skipping a bad element still needs a successful decode. This accepts
+/// anything, which is the point.
+private struct DiscardedItem: Decodable {
+    init(from decoder: any Decoder) throws {
+        _ = try? decoder.singleValueContainer()
+    }
+}
+
 public struct DockProfile: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var kind: ProfileKind
@@ -403,6 +438,42 @@ public struct DockProfile: Codable, Hashable, Identifiable, Sendable {
     public var scale: Double
     public var shortcut: KeyCombo?
     public var focusFilterID: String?
+
+    /// Decodes item by item, dropping any it cannot read.
+    ///
+    /// An unknown widget kind, or a shape written by a newer build, used to
+    /// throw out of the array, out of the profile, and out of the whole state
+    /// file: one item nobody recognised and every profile was gone. Losing one
+    /// tile is a far better failure than losing the shelf, and the rest of the
+    /// profile is still exactly right.
+    ///
+    /// Deliberately not a lenient `WidgetKind`: falling back there would turn
+    /// somebody's widget into a clock, silently, and leave it looking like
+    /// their configuration rather than like a loss.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        kind = try c.decode(ProfileKind.self, forKey: .kind)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Untitled"
+        color = try c.decodeIfPresent(PaletteColor.self, forKey: .color) ?? .blue
+        scale = try c.decodeIfPresent(Double.self, forKey: .scale) ?? Geometry.defaultScale
+        shortcut = try c.decodeIfPresent(KeyCombo.self, forKey: .shortcut)
+        focusFilterID = try c.decodeIfPresent(String.self, forKey: .focusFilterID)
+
+        var unread = try c.nestedUnkeyedContainer(forKey: .items)
+        var kept: [DockItem] = []
+        while !unread.isAtEnd {
+            // The decode has to advance the container even when it fails, or
+            // one bad item is an infinite loop. Decoding into a throwaway
+            // wrapper consumes the element either way.
+            if let item = try? unread.decode(DockItem.self) {
+                kept.append(item)
+            } else {
+                _ = try? unread.decode(DiscardedItem.self)
+            }
+        }
+        items = kept
+    }
 
     public init(id: UUID = UUID(), kind: ProfileKind, name: String,
                 color: PaletteColor = .blue, items: [DockItem] = [],
@@ -842,3 +913,23 @@ public enum Reorder {
         return result
     }
 }
+
+// MARK: - Choices that tolerate a value they do not know
+
+// Each fallback is the same value the property defaults to, so an unreadable
+// setting behaves exactly as one that was never written.
+extension DockSetup: LenientChoice { public static var fallback: Self { .both } }
+extension DockPosition: LenientChoice { public static var fallback: Self { .bottom } }
+extension AppAppearance: LenientChoice { public static var fallback: Self { .system } }
+extension DockMaterial: LenientChoice { public static var fallback: Self { .liquidGlass } }
+extension GlassStyle: LenientChoice { public static var fallback: Self { .regular } }
+extension MenuBarLabelMode: LenientChoice { public static var fallback: Self { .custom } }
+extension SpacerSize: LenientChoice { public static var fallback: Self { .regular } }
+extension PaletteColor: LenientChoice { public static var fallback: Self { .blue } }
+extension PaperColor: LenientChoice { public static var fallback: Self { .yellow } }
+extension TimerPhase: LenientChoice { public static var fallback: Self { .focus } }
+
+// ProfileKind is deliberately absent. A profile that decoded as the wrong kind
+// would be applied to the wrong surface, writing a shelf layout into Apple's
+// Dock. Losing the profile is the better failure, and it is one profile rather
+// than the file.
