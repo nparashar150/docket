@@ -31,6 +31,11 @@ struct SettingsView: View {
     var onRenameProfile: (UUID, String) -> Void
     var onDuplicateProfile: (UUID?) -> Void
     var onDeleteProfile: (UUID?) -> Void
+    /// The last Dock-apply failure, and a way to be rid of it. Read rather
+    /// than bound because it belongs to AppState and this view holds only the
+    /// persisted state.
+    var lastError: String?
+    var onClearError: () -> Void
 
     @State private var tab = "General"
 
@@ -116,6 +121,25 @@ struct SettingsView: View {
                             .help("Write the selected macOS Dock profile to Apple's Dock.")
                         Button("Capture Current Dock…", action: onCaptureCurrentDock)
                             .help("Save Apple's Dock as it is right now into a new profile.")
+                    }
+                }
+
+                // A failure used to appear only as a disabled line in the menu
+                // bar, and never in the window holding the button that caused
+                // it, so pressing Apply and having nothing happen looked like
+                // the button was broken.
+                if let failure = lastError {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(failure)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        // It had no way to be dismissed either, so it sat there
+                        // describing something that happened once, for ever.
+                        Button("Dismiss", action: onClearError)
+                            .buttonStyle(.link)
                     }
                 }
             }

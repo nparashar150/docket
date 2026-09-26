@@ -121,7 +121,9 @@ final class SettingsWindow: HostedWindow {
                 },
                 onRenameProfile: { app.renameProfile($0, to: $1) },
                 onDuplicateProfile: { if let id = $0 { app.duplicateProfile(id) } },
-                onDeleteProfile: { if let id = $0 { app.deleteProfile(id) } }
+                onDeleteProfile: { if let id = $0 { app.deleteProfile(id) } },
+                lastError: app.lastError,
+                onClearError: { app.clearError() }
             ),
             title: "Docket Settings",
             size: NSSize(width: 520, height: 460)
