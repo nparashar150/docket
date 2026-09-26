@@ -112,10 +112,75 @@ final class SettingsWindow: HostedWindow {
                 onCaptureCurrentDock: { Task { await app.captureCurrentDock() } },
                 onSetScale: { app.setScale($0) },
                 onResumeFollowingScale: { app.resumeFollowingScale() },
-                onResumeMirroringApps: { app.resumeMirroringApps() }
+                onResumeMirroringApps: { app.resumeMirroringApps() },
+                onBackUp: { Self.backUp(app) },
+                onRestore: { Self.restore(app) }
             ),
             title: "Docket Settings",
             size: NSSize(width: 520, height: 460)
         )
+    }
+
+    // MARK: Backup
+
+    /// Writes the profiles to a file the user picks.
+    ///
+    /// The panel is AppKit's rather than SwiftUI's `fileExporter`, because an
+    /// accessory app has no window for a sheet to attach to: a modal panel is
+    /// the only kind that reliably comes forward here.
+    private static func backUp(_ app: AppState) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = Backup.suggestedName()
+        panel.allowedContentTypes = []
+        panel.canCreateDirectories = true
+        panel.message = "Save your profiles, their items and widget settings."
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try Backup.encode(app.state).write(to: url, options: .atomic)
+        } catch {
+            report("Could not save the backup.", error)
+        }
+    }
+
+    /// Reads a backup and merges it in.
+    private static func restore(_ app: AppState) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a Docket profiles backup."
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let payload = try Backup.decode(Data(contentsOf: url))
+            var state = app.state
+            let before = state.profiles.count
+            Backup.merge(payload, into: &state)
+            app.state = state
+
+            let added = state.profiles.count - before
+            let updated = payload.profiles.count - added
+            let alert = NSAlert()
+            alert.messageText = "Restored \(payload.profiles.count) profile\(payload.profiles.count == 1 ? "" : "s")."
+            // Says what it did rather than just that it worked: a merge that
+            // replaced something should not look identical to one that only
+            // added.
+            alert.informativeText = updated > 0
+                ? "\(added) added, \(updated) replaced from the backup."
+                : "\(added) added."
+            alert.runModal()
+        } catch {
+            report("Could not read that backup.", error)
+        }
+    }
+
+    private static func report(_ message: String, _ error: any Error) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 }
