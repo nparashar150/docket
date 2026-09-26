@@ -103,6 +103,34 @@ final class WidgetOptionTests: XCTestCase {
         }
     }
 
+    // MARK: Readers agreeing on a default
+
+    /// A widget saved before an option existed carries no value for it, so
+    /// every reader has to fall back to the same thing. `naturalSize` read
+    /// System Activity's metrics with no default while the tile and the panel
+    /// both defaulted to two, so the tile measured as one column and drew two.
+    func testAnUnconfiguredWidgetIsMeasuredForWhatItDraws() {
+        let bare = WidgetInstance(kind: .system, config: WidgetConfig())
+        var explicit = bare
+        explicit.config.set("metrics", .list([.string("cpu"), .string("memory")]))
+
+        XCTAssertEqual(WidgetCatalog.naturalSize(bare),
+                       WidgetCatalog.naturalSize(explicit),
+                       "no stored metrics has to measure the same as the default it draws")
+    }
+
+    /// And the sizes really do differ by count, or the test above would pass
+    /// for the wrong reason.
+    func testTheSizeDependsOnHowManyMetricsThereAre() {
+        var one = WidgetInstance(kind: .system, config: WidgetConfig())
+        one.config.set("metrics", .list([.string("cpu")]))
+        var three = one
+        three.config.set("metrics", .list([.string("cpu"), .string("memory"), .string("disk")]))
+
+        XCTAssertNotEqual(WidgetCatalog.naturalSize(one).width,
+                          WidgetCatalog.naturalSize(three).width)
+    }
+
     // MARK: Free-form lists
 
     /// The watchlist editor is a comma separated field, so the parse is the
