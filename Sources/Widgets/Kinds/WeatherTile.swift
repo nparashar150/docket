@@ -139,11 +139,30 @@ struct WeatherTile: View {
         VStack(spacing: 2) {
             icon(size: 21)
             temperature(weather?.temperatureC, size: 17)
-            Text(layout == "conditions" ? (weather?.condition ?? "-") : city)
+            Text(columnCaption)
                 .font(WidgetStyle.caption(10))
                 .foregroundStyle(WidgetStyle.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+        }
+    }
+
+    /// What the third line says on a 76pt column.
+    ///
+    /// Hourly used to fall through to the city, so on a side shelf it was
+    /// indistinguishable from Current and the style picker appeared to do
+    /// nothing. Eight columns of forecast genuinely do not fit here, so it
+    /// shows the part of the forecast that does: the next hour.
+    private var columnCaption: String {
+        switch layout {
+        case "conditions":
+            return weather?.condition ?? "-"
+        case "hourly":
+            guard let next = hours.first else { return city }
+            let hour = next.date.formatted(.dateTime.hour(.defaultDigits(amPM: .omitted)))
+            return "\(hour)  \(degrees(next.temperatureC))"
+        default:
+            return city
         }
     }
 
