@@ -155,6 +155,21 @@ public final class AppState {
         state.profiles[index].items.append(item)
     }
 
+    /// Puts an item directly after another one.
+    ///
+    /// Appending is wrong for a spacer, whose entire purpose is to sit between
+    /// two particular things. Falls back to appending when the anchor is not
+    /// in the profile, which happens for a running app that was never pinned.
+    public func insertItem(_ item: DockItem, after anchorID: UUID) {
+        if mirroringApps { adoptSystemApps() }
+        guard let target = state.customDock.profileID, let index = index(of: target) else { return }
+        if let slot = state.profiles[index].items.firstIndex(where: { $0.id == anchorID }) {
+            state.profiles[index].items.insert(item, at: slot + 1)
+        } else {
+            state.profiles[index].items.append(item)
+        }
+    }
+
     /// Replaces an item in place, keeping its position on the shelf.
     public func replaceItem(_ itemID: UUID, with item: DockItem) {
         if mirroringApps { adoptSystemApps() }

@@ -1236,9 +1236,25 @@ struct DockShelfView: View {
                 Button("Open") { open(entry) }
             }
         }
+        // Spacers were implemented end to end - drawn, sized, labelled, and
+        // converted both ways to Apple's own spacer tiles - with no way for
+        // anyone to make one. Here rather than in the library because a
+        // spacer is about where it goes, so it is inserted next to the tile
+        // that was clicked rather than appended to the end.
+        Divider()
+        Menu("Add Spacer") {
+            Button("Small") { addSpacer(.small, after: entry) }
+            Button("Regular") { addSpacer(.regular, after: entry) }
+        }
         Divider()
         Button("Add Widget…") { LibraryWindow.shared.show(app: app) }
         Button("Dock Settings…") { SettingsWindow.shared.show(app: app) }
+    }
+
+    private func addSpacer(_ size: SpacerSize, after entry: Entry) {
+        withAnimation(.snappy(duration: 0.24)) {
+            app.insertItem(.spacer(id: UUID(), size: size), after: entry.id)
+        }
     }
 
     /// Removes a tile the way the Dock does: the system poof, played where
