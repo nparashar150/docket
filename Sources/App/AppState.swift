@@ -155,6 +155,107 @@ public final class AppState {
         state.profiles[index].items.append(item)
     }
 
+    // MARK: Profiles
+
+    /// Adds an empty profile and makes it the active one for its surface.
+    ///
+    /// Profiles are the app's central idea and none of this was reachable:
+    /// the model could create, rename and delete them, and no control
+    /// anywhere did. The only way to get a second one was to capture Apple's
+    /// Dock, which always made another called "Current Dock".
+    @discardableResult
+    public func createProfile(kind: ProfileKind, named name: String) -> DockProfile {
+        let profile = DockProfile(kind: kind, name: uniqueName(name))
+        state.profiles.append(profile)
+        switch kind {
+        case .customDock: state.customDock.profileID = profile.id
+        case .macOSDock: state.macOSDock.profileID = profile.id
+        }
+        return profile
+    }
+
+    public func renameProfile(_ id: UUID, to name: String) {
+        guard let index = index(of: id) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        state.profiles[index].name = uniqueName(trimmed, excluding: id)
+    }
+
+    /// Copies a profile, including everything on it.
+    @discardableResult
+    public func duplicateProfile(_ id: UUID) -> DockProfile? {
+        guard let index = index(of: id) else { return nil }
+        var copy = state.profiles[index]
+        copy.id = UUID()
+        copy.name = uniqueName("\(copy.name) copy")
+        // Fresh identities throughout, or the copy and the original would
+        // share item ids and editing one would move things on the other.
+        copy.items = copy.items.map(Self.reidentified)
+        state.profiles.insert(copy, at: index + 1)
+        return copy
+    }
+
+    /// Deletes a profile, moving whichever surface was using it to another.
+    ///
+    /// The last custom profile cannot go: the shelf has to point at
+    /// something, and deleting it would leave an empty shelf with no way to
+    /// get a profile back.
+    public func deleteProfile(_ id: UUID) {
+        guard let index = index(of: id) else { return }
+        let kind = state.profiles[index].kind
+        let siblings = state.profiles.filter { $0.kind == kind && $0.id != id }
+        guard kind == .macOSDock || !siblings.isEmpty else { return }
+
+        state.profiles.remove(at: index)
+        if state.customDock.profileID == id { state.customDock.profileID = siblings.first?.id }
+        // A macOS Dock profile may go to nothing, which is the documented
+        // "leave the live Dock completely alone" state.
+        if state.macOSDock.profileID == id { state.macOSDock.profileID = nil }
+    }
+
+    /// Whether deleting this one is allowed, for a control to grey itself out.
+    public func canDeleteProfile(_ id: UUID) -> Bool {
+        guard let profile = state.profile(id) else { return false }
+        if profile.kind == .macOSDock { return true }
+        return state.profiles.contains { $0.kind == .customDock && $0.id != id }
+    }
+
+    /// "Current Dock", then "Current Dock 2", and so on.
+    ///
+    /// Capture used to make another profile with the identical name every
+    /// time, silently, and nothing could rename or remove the duplicates.
+    private func uniqueName(_ wanted: String, excluding: UUID? = nil) -> String {
+        let taken = Set(state.profiles.filter { $0.id != excluding }.map(\.name))
+        guard taken.contains(wanted) else { return wanted }
+        var n = 2
+        while taken.contains("\(wanted) \(n)") { n += 1 }
+        return "\(wanted) \(n)"
+    }
+
+    private static func reidentified(_ item: DockItem) -> DockItem {
+        switch item {
+        case .app(_, let bundleID, let ref):
+            return .app(id: UUID(), bundleID: bundleID, ref: ref)
+        case .folder(_, let ref, let icon):
+            return .folder(id: UUID(), ref: ref, icon: icon)
+        case .file(_, let ref):
+            return .file(id: UUID(), ref: ref)
+        case .link(_, let url, let title):
+            return .link(id: UUID(), url: url, title: title)
+        case .spacer(_, let size):
+            return .spacer(id: UUID(), size: size)
+        case .widget(let widget):
+            var copy = widget
+            copy.id = UUID()
+            return .widget(copy)
+        case .group(let group):
+            var copy = group
+            copy.id = UUID()
+            copy.items = copy.items.map(reidentified)
+            return .group(copy)
+        }
+    }
+
     /// Puts an item directly after another one.
     ///
     /// Appending is wrong for a spacer, whose entire purpose is to sit between
@@ -408,7 +509,10 @@ public final class AppState {
             // Remember the very first capture as the user's original layout,
             // so there is always a way back to what they had before Docket.
             if state.originalMacOSDock == nil { state.originalMacOSDock = tiles }
-            var profile = DockProfile(kind: .macOSDock, name: name)
+            // Numbered rather than identical. Capturing twice used to make two
+            // profiles with the same name, silently, and nothing could tell
+            // them apart or remove either.
+            var profile = DockProfile(kind: .macOSDock, name: uniqueName(name))
             profile.items = tiles.compactMap(Self.item(from:))
             state.profiles.append(profile)
             state.macOSDock.profileID = profile.id
