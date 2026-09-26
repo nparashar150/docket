@@ -154,7 +154,8 @@ struct WidgetLibraryView: View {
         .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(.quaternary))
     }
 
-    private func row(_ item: LibrarySelection, symbol: String, title: String, enabled: Bool) -> some View {
+    private func row(_ item: LibrarySelection, symbol: String, title: String,
+                     enabled: Bool) -> some View {
         let selected = selection == item
         return Button { selection = item } label: {
             HStack(spacing: 7) {
@@ -176,6 +177,12 @@ struct WidgetLibraryView: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
+        // Three categories are permanently greyed out, and used to say
+        // nothing about why: Business has no widgets built yet, Calendar and
+        // Reminders have them but they are not finished. A row that is dim
+        // for ever with no explanation reads as a fault in the app.
+        .help(enabled ? "" : "No widgets here yet.")
+        .accessibilityHint(enabled ? "" : "No widgets in this category yet.")
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 
