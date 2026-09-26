@@ -17,7 +17,14 @@ public enum WidgetCatalog {
         public var variants: [(title: String, overrides: [String: WidgetConfig.Value])]
         /// Whether this kind can collapse to a narrow tile.
         public var supportsCompact: Bool
-        /// Ships in the first release: no permissions, no network.
+        /// Whether the library offers this kind.
+        ///
+        /// It was described as "no permissions, no network", and has never
+        /// meant that: Weather needs the network and a location, Stocks needs
+        /// the network, Now Playing needs Automation consent, and all three
+        /// are listed. What it actually gates is whether a kind has a tile
+        /// that renders something honest, so the only kinds excluded are the
+        /// ones that would draw the "still to come" placeholder.
         public var selfContained: Bool
     }
 
@@ -66,14 +73,14 @@ public enum WidgetCatalog {
                          ("Date + next event", ["layout": .string("dateAndEvent")]),
                          ("Date + agenda", ["layout": .string("agenda")]),
                          ("Date", ["layout": .string("date")])],
-              supportsCompact: true, selfContained: false),
+              supportsCompact: true, selfContained: true),
 
         Entry(kind: .reminders, name: "Reminders", category: .reminders,
               defaults: c(["layout": .string("list"), "list": .string("")]),
               variants: [("List", ["layout": .string("list")]),
                          ("Next reminder", ["layout": .string("next")]),
                          ("Count", ["layout": .string("count")])],
-              supportsCompact: true, selfContained: false),
+              supportsCompact: true, selfContained: true),
 
         Entry(kind: .notes, name: "Sticky Note", category: .notes,
               defaults: c(["text": .string(""), "color": .string("yellow")]),

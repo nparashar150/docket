@@ -56,7 +56,10 @@ public struct WidgetTile: View {
         case .weather: WeatherTile(instance: instance, context: context)
         case .music: MusicTile(instance: instance, context: context)
         // Still to come; a labelled placeholder beats rendering nothing.
-        case .calendar, .reminders, .aiUsage, .shortcut, .stripe, .paddle, .shopify:
+        case .calendar: CalendarTile(instance: instance, context: context)
+        case .reminders: RemindersTile(instance: instance, context: context)
+        // Still to come; a labelled placeholder beats rendering nothing.
+        case .aiUsage, .shortcut, .stripe, .paddle, .shopify:
             UnavailableTile(kind: instance.kind)
         }
     }

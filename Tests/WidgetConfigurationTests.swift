@@ -440,14 +440,26 @@ final class WidgetConfigurationTests: XCTestCase {
         }
     }
 
-    /// The first release ships only widgets that need no permission and no
-    /// network, so a kind that reads the user's calendar, reminders or
-    /// shortcuts must never appear in the shippable set - it would render as a
-    /// permanently empty card for anyone who has not granted access.
-    func testTheShippableSetExcludesEveryPermissionDependentKind() {
+    /// The library must never offer a kind that would draw the "still to
+    /// come" placeholder, which is what `selfContained` actually gates.
+    ///
+    /// This used to assert that a listed kind needed no permission and no
+    /// network, which the catalog has never satisfied: Weather needs the
+    /// network and a location, Stocks needs the network, and Now Playing
+    /// needs Automation consent. All three were listed and the test passed,
+    /// because it only ever checked three specific kinds rather than the rule
+    /// it described.
+    ///
+    /// Calendar and Reminders are listed now that they have tiles. They ask
+    /// for nothing when drawn: without access they show that they have none,
+    /// which is the same contract Now Playing has always had.
+    func testTheLibraryOnlyOffersKindsThatCanBeDrawn() {
+        let placeholders: Set<WidgetKind> = [.aiUsage, .shortcut, .stripe, .paddle, .shopify]
         let shippable = Set(WidgetCatalog.shippable.map(\.kind))
-        for kind in [WidgetKind.calendar, .reminders, .shortcut] {
-            XCTAssertFalse(shippable.contains(kind), "\(kind)")
+
+        for kind in placeholders {
+            XCTAssertFalse(shippable.contains(kind),
+                           "\(kind) has no tile, so the library must not offer it")
         }
         for entry in WidgetCatalog.shippable {
             XCTAssertTrue(entry.selfContained, "\(entry.kind)")
