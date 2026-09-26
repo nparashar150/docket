@@ -752,6 +752,14 @@ public struct PersistedState: Codable, Sendable {
     /// Apple's Dock preferences from before the shelf borrowed its strip.
     /// Non-nil means they are currently changed and owe a restore.
     public var borrowedDockPrefs: DockPrefs?
+    /// Whether to look for new releases.
+    ///
+    /// Three states on purpose. Nil means the question has not been asked, and
+    /// it is asked once rather than assumed: this is the only thing the app
+    /// does unprompted that talks to a server, and it necessarily tells GitHub
+    /// that someone ran it. Everything else that leaves the machine, weather
+    /// and stock quotes, is there because the user added that widget.
+    public var checkForUpdates: Bool?
 
     /// Decodes field by field, so an unknown or missing key is a default and
     /// not a thrown error.
@@ -774,6 +782,7 @@ public struct PersistedState: Codable, Sendable {
         timer = try c.decodeIfPresent(TimerState.self, forKey: .timer) ?? TimerState()
         originalMacOSDock = try c.decodeIfPresent([MacOSDockTile].self, forKey: .originalMacOSDock)
         borrowedDockPrefs = try c.decodeIfPresent(DockPrefs.self, forKey: .borrowedDockPrefs)
+        checkForUpdates = try c.decodeIfPresent(Bool.self, forKey: .checkForUpdates)
     }
 
     public init() {}

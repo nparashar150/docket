@@ -59,10 +59,21 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             menu.addItem(item("Restore Original Dock", #selector(restoreDock)))
         }
         menu.addItem(.separator())
+        // Only when there is one. An always-present "you are up to date" line
+        // is a permanent reminder of something nobody needs reminding of.
+        if let update = UpdateService.shared.available {
+            let entry = item("Update to \(update.version)…", #selector(openUpdate))
+            entry.image = NSImage(systemSymbolName: "arrow.down.circle.fill",
+                                  accessibilityDescription: nil)
+            menu.addItem(entry)
+            menu.addItem(.separator())
+        }
         menu.addItem(item("Add Widget…", #selector(openLibrary)))
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("Quit Docket", #selector(quit), key: "q"))
     }
+
+    @objc private func openUpdate() { UpdateService.shared.openReleasePage() }
 
     private func addProfileSection(to menu: NSMenu, kind: ProfileKind, title: String) {
         let profiles = app.profiles(of: kind)
