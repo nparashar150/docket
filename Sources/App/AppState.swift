@@ -26,11 +26,21 @@ public final class AppState {
             if state.customDock != oldValue.customDock || state.setup != oldValue.setup {
                 onShelfSettingsChanged?()
             }
+            if state.menuBar != oldValue.menuBar || state.setup != oldValue.setup {
+                onMenuBarSettingsChanged?()
+            }
+            if state.appearance != oldValue.appearance {
+                onAppearanceChanged?()
+            }
         }
     }
 
     /// Called when a setting the shelf draws from changes.
     @ObservationIgnored public var onShelfSettingsChanged: (@MainActor () -> Void)?
+    /// The same for the status item, whose icon and label both used to wait
+    /// for a relaunch, and for the app's appearance.
+    @ObservationIgnored public var onMenuBarSettingsChanged: (@MainActor () -> Void)?
+    @ObservationIgnored public var onAppearanceChanged: (@MainActor () -> Void)?
 
     /// Ticks once a second. Widgets read this rather than each starting a
     /// timer of their own - one timer for the whole shelf.

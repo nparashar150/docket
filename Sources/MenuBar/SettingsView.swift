@@ -150,7 +150,15 @@ struct SettingsView: View {
                      selection: $state.macOSDock.profileID, allowsNone: true)
 
             Section("Menu Bar") {
+                // Refused when there is no shelf, because the icon is then the
+                // only way into an app with no Dock tile and no window of its
+                // own. Disabled and explained rather than accepted and
+                // ignored.
                 Toggle("Show menu bar icon", isOn: $state.menuBar.showIcon)
+                    .disabled(state.setup == .macOSDockOnly)
+                    .help(state.setup == .macOSDockOnly
+                          ? "With no shelf on screen, this is the only way to reach Docket."
+                          : "The shelf's own menu can still reach Settings with this off.")
                 Picker("Label", selection: $state.menuBar.label) {
                     ForEach(MenuBarLabelMode.allCases, id: \.self) { Text(title($0)).tag($0) }
                 }
