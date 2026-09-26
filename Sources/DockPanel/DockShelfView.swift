@@ -1188,6 +1188,14 @@ struct DockShelfView: View {
                     withAnimation(.snappy(duration: 0.22)) { app.updateWidget(updated) }
                 }
             }
+            // setCity was written and never called from anywhere. It matters
+            // more than most settings: macOS will not show an accessory app
+            // the location prompt, so typing a city is how the weather widget
+            // is made to work at all, and hunting for it in Settings is a poor
+            // route to the only thing that fixes an empty tile.
+            if let widget = entry.item.widget, widget.kind == .weather {
+                Button("Set Location…") { setCity(widget) }
+            }
             if entry.item.fileRef != nil {
                 Button("Show in Finder") { AppCatalog.shared.reveal(entry.item) }
             }
