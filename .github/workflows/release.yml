@@ -71,11 +71,29 @@ jobs:
       # otherwise produce a thin arm64 binary. macOS 26 is the last release
       # that runs on Intel Macs, and a thin build does not refuse to launch
       # there politely - it refuses to launch at all.
+      # CFBundleVersion is the build identity macOS itself compares:
+      # LaunchServices uses it to decide which of two copies of an app is
+      # newer, and every update framework compares it rather than the
+      # marketing string. It was pinned to 1 in project.yml and overridden
+      # nowhere, so every release shipped as build 1 and nothing could tell
+      # one from another.
+      #
+      # Packed into a single increasing integer, since it has to increase and
+      # a dotted string does not compare numerically. Two digits each for
+      # minor and patch, which is room enough long before the majors roll.
+      - name: Derive the build number
+        run: |
+          VERSION="${TAG#v}"
+          IFS=. read -r MAJOR MINOR PATCH <<< "${VERSION%%-*}"
+          echo "BUILD=$(( ${MAJOR:-0} * 10000 + ${MINOR:-0} * 100 + ${PATCH:-0} ))" >> "$GITHUB_ENV"
+
       - name: Build Release
         run: |
+          echo "Building $TAG as CFBundleShortVersionString=${TAG#v} CFBundleVersion=$BUILD"
           xcodebuild build \
             -project Docket.xcodeproj \
             -scheme Docket \
+            CURRENT_PROJECT_VERSION="$BUILD" \
             -configuration Release \
             -derivedDataPath build \
             MARKETING_VERSION="${TAG#v}" \
