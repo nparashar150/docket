@@ -56,9 +56,12 @@ public enum WidgetCatalog {
               defaults: c(["duration": .number(2700)]),
               variants: [], supportsCompact: false, selfContained: true),
 
+        // No `showCallButton`: read by nothing. A join-call affordance needs
+        // the event's conference URL and a row to put it in, neither of which
+        // exists, so the switch promised something that was never built.
         Entry(kind: .calendar, name: "Calendar", category: .calendar,
               defaults: c(["layout": .string("nextEvent"), "allDay": .bool(true),
-                           "showCallButton": .bool(true), "calendars": .list([])]),
+                           "calendars": .list([])]),
               variants: [("Next event", ["layout": .string("nextEvent")]),
                          ("Date + next event", ["layout": .string("dateAndEvent")]),
                          ("Date + agenda", ["layout": .string("agenda")]),
@@ -106,9 +109,10 @@ public enum WidgetCatalog {
                          ("Bars", ["layout": .string("bars")])],
               supportsCompact: true, selfContained: true),
 
+        // No `popupChart`: it was read by nothing, and the detail panel it
+        // presumably meant now exists and always draws its history.
         Entry(kind: .network, name: "Network Activity", category: .system,
-              defaults: c(["display": .string("both"), "chart": .bool(false),
-                           "popupChart": .bool(true)]),
+              defaults: c(["display": .string("both"), "chart": .bool(false)]),
               variants: [("Numbers only", ["chart": .bool(false)]),
                          ("With chart", ["chart": .bool(true)])],
               supportsCompact: true, selfContained: true),
@@ -120,17 +124,21 @@ public enum WidgetCatalog {
         Entry(kind: .airdrop, name: "AirDrop", category: .system, defaults: c([:]),
               variants: [], supportsCompact: false, selfContained: true),
 
+        // `period`, `metric`, `reference` and `style` were offered here and
+        // read by nothing: the service fetches a fixed intraday range,
+        // DitherChart has no reference line and no styles, and no reader ever
+        // asked for a metric. Every one of them persisted and changed nothing.
+        // They come back with the code that honours them, not before.
         Entry(kind: .stock, name: "Stock", category: .stocks,
               defaults: c(["symbol": .string("AAPL"),
-                           "symbols": .list([.string("AAPL")]), "period": .string("1D"),
-                           "metric": .string("percentage"), "chart": .bool(true),
-                           "reference": .bool(true), "style": .string("dithered")]),
+                           "symbols": .list([.string("AAPL")]),
+                           "chart": .bool(true)]),
               variants: [], supportsCompact: true, selfContained: true),
 
+        // No `chart` here, unlike Stock: this tile is a list of rows and has
+        // never drawn one, so the switch had nothing to switch.
         Entry(kind: .watchlist, name: "Watchlist", category: .stocks,
-              defaults: c(["symbols": .list([.string("AAPL"), .string("MSFT"), .string("NVDA")]),
-                           "period": .string("1D"), "metric": .string("percentage"),
-                           "chart": .bool(false), "style": .string("dithered")]),
+              defaults: c(["symbols": .list([.string("AAPL"), .string("MSFT"), .string("NVDA")])]),
               variants: [], supportsCompact: false, selfContained: true),
 
         Entry(kind: .weather, name: "Weather", category: .weather,
@@ -184,7 +192,7 @@ public enum WidgetCatalog {
         return entry.defaults.values.keys.filter { $0 != "layout" }.sorted()
     }
 
-    /// "showCallButton" -> "Show Call Button".
+    /// "showRunningApps" -> "Show Running Apps".
     public static func optionLabel(_ key: String) -> String {
         var words = ""
         for character in key {

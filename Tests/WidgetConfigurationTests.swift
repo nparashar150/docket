@@ -178,9 +178,13 @@ final class WidgetConfigurationTests: XCTestCase {
         }
     }
 
+    /// `showCallButton` used to be here, and this test was pinning it in
+    /// place: it was offered as a toggle and read by nothing, so it persisted
+    /// and changed nothing. A join-call affordance needs the event's
+    /// conference URL and a row to put it in, neither of which exists.
     func testCalendarOffersItsOwnOptionsInOrder() {
         XCTAssertEqual(WidgetCatalog.configurableKeys(.calendar),
-                       ["allDay", "calendars", "showCallButton"])
+                       ["allDay", "calendars"])
     }
 
     // MARK: optionLabel

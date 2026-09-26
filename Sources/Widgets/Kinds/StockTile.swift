@@ -82,20 +82,25 @@ struct StockTile: View {
 
     private var wide: some View {
         HStack(spacing: 8) {
-            // Fixed: the readout keeps its natural width and the chart takes
-            // whatever is left, which is the right half of a 192pt tile.
-            readout(ticker: 11, price: 18, percent: 11, fixed: true)
-            chart.frame(maxWidth: .infinity, maxHeight: 32)
+            // Fixed only when there is a chart to give the rest of the width
+            // to. Without one the readout should spread rather than sit in a
+            // column with empty space beside it.
+            readout(ticker: 11, price: 18, percent: 11, fixed: showsChart)
+            if showsChart { chart.frame(maxWidth: .infinity, maxHeight: 32) }
         }
     }
 
     private var column: some View {
         VStack(alignment: .leading, spacing: 2) {
             readout(ticker: 9, price: 15, percent: 9, fixed: false)
-            chart.frame(maxWidth: .infinity, maxHeight: .infinity)
+            if showsChart { chart.frame(maxWidth: .infinity, maxHeight: .infinity) }
         }
         .padding(.vertical, 5)
     }
+
+    /// The tile drew its chart unconditionally, so the Chart switch in
+    /// Settings persisted and changed nothing.
+    private var showsChart: Bool { instance.config.bool("chart", default: true) }
 
     private var chart: DitherChart {
         DitherChart(samples: quote?.history ?? [], tint: accent)
