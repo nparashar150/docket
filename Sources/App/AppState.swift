@@ -11,8 +11,26 @@ import Observation
 public final class AppState {
 
     public var state: PersistedState {
-        didSet { scheduleSave() }
+        didSet {
+            scheduleSave()
+            // Saving is not applying. Settings wrote straight into this and
+            // nothing told the shelf, so auto-hide, the display pin and the
+            // desktop-widget level all sat in the file doing nothing until
+            // some unrelated event happened to refresh the shelf: a screen
+            // change, a menu bar action, or a relaunch.
+            //
+            // Skipped while the grip is dragging. That writes a new scale on
+            // every pointer event, and re-placing the window under each one
+            // fights the resize it is reporting.
+            guard !ShelfResize.isDragging else { return }
+            if state.customDock != oldValue.customDock || state.setup != oldValue.setup {
+                onShelfSettingsChanged?()
+            }
+        }
     }
+
+    /// Called when a setting the shelf draws from changes.
+    @ObservationIgnored public var onShelfSettingsChanged: (@MainActor () -> Void)?
 
     /// Ticks once a second. Widgets read this rather than each starting a
     /// timer of their own - one timer for the whole shelf.
