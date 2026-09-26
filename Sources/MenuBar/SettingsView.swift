@@ -21,6 +21,9 @@ struct SettingsView: View {
     /// one directional, with nothing in the app able to clear them.
     var onResumeFollowingScale: () -> Void
     var onResumeMirroringApps: () -> Void
+    /// Both present a file panel, which is AppKit's job rather than a view's.
+    var onBackUp: () -> Void
+    var onRestore: () -> Void
 
     @State private var tab = "General"
 
@@ -120,14 +123,14 @@ struct SettingsView: View {
 
             Section {
                 HStack {
-                    // wired in a later phase
-                    Button("Back Up…") {}
-                    Button("Restore…") {}
+                    Button("Back Up…", action: onBackUp)
+                        .disabled(state.profiles.isEmpty)
+                    Button("Restore…", action: onRestore)
                 }
             } header: {
                 Text("Saved Docks")
             } footer: {
-                Text("A backup contains your saved profiles - names, colours, items and widget configuration - not the apps or files they point to.")
+                Text("A backup contains your saved profiles - names, colours, items and widget configuration - not the apps or files they point to. Restoring adds them to what you already have rather than replacing it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
