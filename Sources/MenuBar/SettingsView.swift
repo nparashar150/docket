@@ -24,6 +24,13 @@ struct SettingsView: View {
     /// Both present a file panel, which is AppKit's job rather than a view's.
     var onBackUp: () -> Void
     var onRestore: () -> Void
+    /// Profile management. Through closures for the same reason as the rest:
+    /// this view owns no state and every one of these has to reach AppState,
+    /// which also decides what is allowed.
+    var onCreateProfile: (ProfileKind) -> Void
+    var onRenameProfile: (UUID, String) -> Void
+    var onDuplicateProfile: (UUID?) -> Void
+    var onDeleteProfile: (UUID?) -> Void
 
     @State private var tab = "General"
 
@@ -113,6 +120,11 @@ struct SettingsView: View {
                 }
             }
 
+            profiles(.customDock, title: "Shelf profiles",
+                     selection: $state.customDock.profileID, allowsNone: false)
+            profiles(.macOSDock, title: "macOS Dock profiles",
+                     selection: $state.macOSDock.profileID, allowsNone: true)
+
             Section("Menu Bar") {
                 Toggle("Show menu bar icon", isOn: $state.menuBar.showIcon)
                 Picker("Label", selection: $state.menuBar.label) {
@@ -136,6 +148,50 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    // MARK: - Profiles
+
+    /// Managing the profiles of one surface.
+    ///
+    /// None of this was reachable. The model could create, rename, duplicate
+    /// and delete a profile, and no control anywhere called any of it, so the
+    /// only way to get a second profile was to capture Apple's Dock and the
+    /// only name it could ever have was "Current Dock".
+    @ViewBuilder
+    private func profiles(_ kind: ProfileKind, title: String,
+                          selection: Binding<UUID?>, allowsNone: Bool) -> some View {
+        let mine = state.profiles(of: kind)
+        Section(title) {
+            Picker("Active", selection: selection) {
+                // "No profile" is the documented "leave the live Dock
+                // completely alone" state. It was reachable only until the
+                // first capture, after which nothing could return to it.
+                if allowsNone { Text("No profile").tag(UUID?.none) }
+                ForEach(mine) { Text($0.name).tag(UUID?.some($0.id)) }
+            }
+            .disabled(mine.isEmpty && !allowsNone)
+
+            if let id = selection.wrappedValue, let active = state.profile(id) {
+                TextField("Name", text: Binding(
+                    get: { active.name },
+                    set: { onRenameProfile(id, $0) }))
+            }
+
+            HStack {
+                Button("New…") { onCreateProfile(kind) }
+                Button("Duplicate") { onDuplicateProfile(selection.wrappedValue) }
+                    .disabled(selection.wrappedValue == nil)
+                Spacer()
+                Button("Delete", role: .destructive) {
+                    onDeleteProfile(selection.wrappedValue)
+                }
+                // The shelf has to point at something. Deleting the last one
+                // would leave it empty with no way to get a profile back.
+                .disabled(selection.wrappedValue == nil
+                          || (kind == .customDock && mine.count <= 1))
+            }
+        }
     }
 
     // MARK: - Dock

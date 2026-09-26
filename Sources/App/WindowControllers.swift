@@ -114,7 +114,14 @@ final class SettingsWindow: HostedWindow {
                 onResumeFollowingScale: { app.resumeFollowingScale() },
                 onResumeMirroringApps: { app.resumeMirroringApps() },
                 onBackUp: { Self.backUp(app) },
-                onRestore: { Self.restore(app) }
+                onRestore: { Self.restore(app) },
+                onCreateProfile: { kind in
+                    app.createProfile(kind: kind,
+                                      named: kind == .customDock ? "New Shelf" : "New Dock")
+                },
+                onRenameProfile: { app.renameProfile($0, to: $1) },
+                onDuplicateProfile: { if let id = $0 { app.duplicateProfile(id) } },
+                onDeleteProfile: { if let id = $0 { app.deleteProfile(id) } }
             ),
             title: "Docket Settings",
             size: NSSize(width: 520, height: 460)
