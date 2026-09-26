@@ -25,7 +25,17 @@ struct SystemActivityTile: View {
 
     private var layout: String { instance.config.string("layout", default: "numbers") }
 
-    private var showsChart: Bool { instance.config.bool("chart") }
+    /// Asks whether a chart applies here as well as whether it is wanted.
+    ///
+    /// Switching to rings or bars did not clear the stored value, so a widget
+    /// could sit on chart true while showing bars and produce a graph nobody
+    /// asked for the moment it went back to numbers. Reading the rule rather
+    /// than rewriting the config on every layout change means a stale value is
+    /// simply inert, and the setting is remembered if the layout comes back.
+    private var showsChart: Bool {
+        WidgetCatalog.applies("chart", to: instance.config, kind: .system)
+            && instance.config.bool("chart", default: false)
+    }
 
     @ViewBuilder
     private var horizontal: some View {

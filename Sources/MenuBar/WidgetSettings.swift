@@ -23,7 +23,7 @@ struct WidgetSettingsSections: View {
                     if !pair.entry.variants.isEmpty {
                         stylePicker(pair.entry, pair.instance)
                     }
-                    ForEach(options(for: pair.entry), id: \.self) { key in
+                    ForEach(options(for: pair.entry, pair.instance), id: \.self) { key in
                         control(key, entry: pair.entry, instance: pair.instance)
                     }
                 }
@@ -50,7 +50,7 @@ struct WidgetSettingsSections: View {
     private var configurable: [(instance: WidgetInstance, entry: WidgetCatalog.Entry)] {
         instances.compactMap { instance in
             guard let entry = WidgetCatalog.entry(instance.kind) else { return nil }
-            let hasControls = !entry.variants.isEmpty || !options(for: entry).isEmpty
+            let hasControls = !entry.variants.isEmpty || !options(for: entry, instance).isEmpty
             return hasControls ? (instance, entry) : nil
         }
     }
@@ -64,9 +64,16 @@ struct WidgetSettingsSections: View {
         state.profiles[p].items[i] = .widget(updated)
     }
 
-    /// Everything configurable except `layout`, which the style picker owns.
-    private func options(for entry: WidgetCatalog.Entry) -> [String] {
-        WidgetCatalog.configurableKeys(entry.kind)
+    /// Everything configurable except `layout`, which the style picker owns,
+    /// and anything the current layout makes meaningless.
+    ///
+    /// Offering an option that does nothing is the same defect as offering
+    /// one nothing reads: it accepts a change and produces none.
+    private func options(for entry: WidgetCatalog.Entry,
+                         _ instance: WidgetInstance) -> [String] {
+        WidgetCatalog.configurableKeys(entry.kind).filter {
+            WidgetCatalog.applies($0, to: instance.config, kind: entry.kind)
+        }
     }
 
     // MARK: Controls

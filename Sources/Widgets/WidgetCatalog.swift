@@ -192,6 +192,29 @@ public enum WidgetCatalog {
         return entry.defaults.values.keys.filter { $0 != "layout" }.sorted()
     }
 
+    /// Whether an option means anything given the rest of the configuration.
+    ///
+    /// Some options only apply to one layout. System Activity's chart is
+    /// drawn behind its numbers and there is nowhere for it to go behind
+    /// rings or bars, so the switch sat there accepting changes and doing
+    /// nothing in two of the four layouts, and switching to one of them did
+    /// not clear it either: a widget could be left storing chart true while
+    /// showing bars, and going back to numbers brought a graph nobody asked
+    /// for.
+    ///
+    /// The catalog already knew this. Its variants offer "Numbers" and
+    /// "Numbers + graph" and no charted ring or bar, so this states what the
+    /// variant list has always implied.
+    public static func applies(_ key: String, to config: WidgetConfig,
+                               kind: WidgetKind) -> Bool {
+        switch (kind, key) {
+        case (.system, "chart"):
+            config.string("layout", default: "numbers") == "numbers"
+        default:
+            true
+        }
+    }
+
     /// "showRunningApps" -> "Show Running Apps".
     public static func optionLabel(_ key: String) -> String {
         var words = ""
