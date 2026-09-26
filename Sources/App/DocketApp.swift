@@ -44,6 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The Settings window writes the model directly rather than going
         // through the menu bar, so it needs the same wire.
         state.onShelfSettingsChanged = { [weak self] in self?.shelf.refresh() }
+        state.onMenuBarSettingsChanged = { [weak self] in self?.menuBar.refreshButton() }
+        state.onAppearanceChanged = { [weak self] in self?.applyAppearance() }
 
         applyAppearance()
         if state.state.setup != .macOSDockOnly {

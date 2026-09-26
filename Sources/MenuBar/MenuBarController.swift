@@ -20,12 +20,26 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     func refreshButton() {
+        // The toggle was read by nothing: the status item was always created
+        // and always shown. Honoured now, but never to the point of leaving
+        // the app unreachable - see `canHideStatusItem`.
+        statusItem.isVisible = app.state.menuBar.showIcon || !canHideStatusItem
+
         guard let button = statusItem.button else { return }
         button.image = NSImage(systemSymbolName: "rectangle.bottomthird.inset.filled",
                                accessibilityDescription: "Docket")
         button.image?.isTemplate = true
         button.title = labelText.isEmpty ? "" : " \(labelText)"
     }
+
+    /// Whether there is another way into the app if the icon goes.
+    ///
+    /// Docket is an accessory app: no Dock tile, no window of its own. With
+    /// the shelf on screen its context menu reaches Settings, so hiding the
+    /// icon is recoverable. Without a shelf it is the only way in, and hiding
+    /// it would strand someone in an app they can see no part of and cannot
+    /// quit.
+    var canHideStatusItem: Bool { app.state.setup != .macOSDockOnly }
 
     private var labelText: String {
         let native = app.macOSProfile?.name ?? ""
