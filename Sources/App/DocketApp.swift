@@ -41,6 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shelf = DockPanelController(app: state)
         menuBar = MenuBarController(app: state)
         menuBar.onShelfSettingsChanged = { [weak self] in self?.shelf.refresh() }
+        // The Settings window writes the model directly rather than going
+        // through the menu bar, so it needs the same wire.
+        state.onShelfSettingsChanged = { [weak self] in self?.shelf.refresh() }
 
         applyAppearance()
         if state.state.setup != .macOSDockOnly {

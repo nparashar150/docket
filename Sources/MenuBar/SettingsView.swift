@@ -139,11 +139,17 @@ struct SettingsView: View {
             }
 
             Section("Placement") {
+                // .disabled was inside the Picker's content, so it applied to
+                // the ForEach and never to the Picker: the control stayed live
+                // while following, accepted a choice, and the shelf ignored it.
                 Picker("Position", selection: $state.customDock.position) {
                     ForEach(DockPosition.allCases, id: \.self) { Text(title($0)).tag($0) }
-                .disabled(state.customDock.followSystemDock)
                 }
                 .pickerStyle(.segmented)
+                .disabled(state.customDock.followSystemDock)
+                .help(state.customDock.followSystemDock
+                      ? "While matching the macOS Dock, the shelf takes a free edge beside it."
+                      : "Which edge the shelf sits on.")
 
                 Picker("Display", selection: $state.customDock.displayID) {
                     Text("Active display").tag(UInt32?.none)
@@ -196,8 +202,15 @@ struct SettingsView: View {
             }
 
             Section("Behaviour") {
+                // Ignored while following, where hiding comes from the Dock's
+                // own setting. It used to stay live there and simply have no
+                // effect, which reads as a broken toggle rather than one that
+                // does not apply.
                 Toggle("Automatically hide", isOn: $state.customDock.autoHide)
-                    .help("Reveal the Dock when the pointer reaches its screen edge.")
+                    .disabled(state.customDock.followSystemDock)
+                    .help(state.customDock.followSystemDock
+                          ? "While matching the macOS Dock, the shelf hides when the Dock does."
+                          : "Reveal the shelf when the pointer reaches its screen edge.")
                 Toggle("Show handle when hidden", isOn: $state.customDock.showHandleWhenHidden)
                     .disabled(!state.customDock.autoHide)
                     .help("A small visible handle while hidden. The edge still reveals the Dock without it.")

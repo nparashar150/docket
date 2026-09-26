@@ -160,6 +160,14 @@ final class DockPanelController: NSObject, NSWindowDelegate {
            let match = NSScreen.screens.first(where: { $0.displayID == id }) {
             return match
         }
+        // "Active display" means the one the pointer is on, which is what the
+        // setting promises. `NSScreen.main` is the screen holding the key
+        // window, and an accessory app has none, so it answered with whichever
+        // display the frontmost app happened to be on and the shelf stayed put
+        // while the pointer moved to another.
+        if let pointed = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) {
+            return pointed
+        }
         return NSScreen.main ?? NSScreen.screens[0]
     }
 
