@@ -103,6 +103,9 @@ final class SettingsWindow: HostedWindow {
     static let shared = SettingsWindow()
 
     func show(app: AppState, tab: String = "General") {
+        // Set before presenting, so a window that is only being raised still
+        // lands on the tab the caller asked for.
+        SettingsSelection.shared.current = tab
         @Bindable var bindable = app
         present(
             SettingsView(

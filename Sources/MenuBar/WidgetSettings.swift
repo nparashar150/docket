@@ -19,7 +19,10 @@ struct WidgetSettingsSections: View {
             }
         } else {
             ForEach(configurable, id: \.instance.id) { pair in
-                Section(pair.entry.name) {
+                // Numbered only when there is more than one of a kind. Two
+                // Sticky Notes produced two sections both called "Sticky
+                // Note", with nothing to say which note each one edited.
+                Section(sectionTitle(for: pair)) {
                     if !pair.entry.variants.isEmpty {
                         stylePicker(pair.entry, pair.instance)
                     }
@@ -62,6 +65,17 @@ struct WidgetSettingsSections: View {
         var updated = instance
         change(&updated.config)
         state.profiles[p].items[i] = .widget(updated)
+    }
+
+    /// "Sticky Note" alone, or "Sticky Note 1" and "Sticky Note 2" when there
+    /// are several. Ordinal rather than identifier: a UUID in a heading tells
+    /// nobody anything, and the order matches the shelf.
+    private func sectionTitle(for pair: (instance: WidgetInstance, entry: WidgetCatalog.Entry)) -> String {
+        let sameKind = configurable.filter { $0.entry.kind == pair.entry.kind }
+        guard sameKind.count > 1,
+              let n = sameKind.firstIndex(where: { $0.instance.id == pair.instance.id })
+        else { return pair.entry.name }
+        return "\(pair.entry.name) \(n + 1)"
     }
 
     /// Everything configurable except `layout`, which the style picker owns,

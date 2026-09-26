@@ -1,5 +1,18 @@
 import AppKit
 import SwiftUI
+import Observation
+
+/// Which Settings tab is showing.
+///
+/// Outside the view because the window is reused: raising an existing one
+/// runs no `onAppear`, so a view holding this in `@State` could never be told
+/// to go anywhere.
+@MainActor @Observable
+final class SettingsSelection {
+    static let shared = SettingsSelection()
+    var current = "General"
+    private init() {}
+}
 
 /// Docket's Settings window.
 ///
@@ -37,7 +50,14 @@ struct SettingsView: View {
     var lastError: String?
     var onClearError: () -> Void
 
-    @State private var tab = "General"
+    /// Which tab is showing, held outside the view.
+    ///
+    /// It was `@State` set from `initialTab` in `onAppear`, and `onAppear`
+    /// does not fire again for a window that is merely being raised. So
+    /// "Widget Settings…" opened the Widgets tab exactly once, and every time
+    /// after that raised whatever tab was last looked at while claiming to go
+    /// somewhere specific.
+    @State private var selection = SettingsSelection.shared
 
     /// The size the shelf is actually drawn at, which is the Dock's while
     /// following and the stored one once overridden. Showing the stored value
@@ -62,14 +82,14 @@ struct SettingsView: View {
 
 
     var body: some View {
-        TabView(selection: $tab) {
+        TabView(selection: $selection.current) {
             Tab("General", systemImage: "gearshape", value: "General") { general }
             Tab("Dock", systemImage: "dock.rectangle", value: "Dock") { dock }
             Tab("Widgets", systemImage: "square.grid.2x2", value: "Widgets") { widgets }
             Tab("About", systemImage: "info.circle", value: "About") { about }
         }
         .frame(width: 520, height: 460)
-        .onAppear { tab = initialTab }
+        .onAppear { selection.current = initialTab }
     }
 
     // MARK: - General
