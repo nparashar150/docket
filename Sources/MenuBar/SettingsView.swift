@@ -68,6 +68,22 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             }
 
+            Section("Updates") {
+                // The consent alert promises this control exists, so it does.
+                // Binding through a default of false means a state file that
+                // predates the question reads as off rather than as answered.
+                Toggle("Check for new versions", isOn: Binding(
+                    get: { state.checkForUpdates == true },
+                    set: { state.checkForUpdates = $0 }))
+                    .help("Once a day, Docket asks GitHub for the latest version number and tells you in its menu bar item if it is newer. Nothing is installed for you, and nothing else is sent.")
+
+                LabeledContent("Version") {
+                    Text(UpdateService.shared.current?.description ?? "unknown")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+
             Section("Dock setup") {
                 Picker("", selection: $state.setup) {
                     ForEach(DockSetup.allCases, id: \.self) { setup in

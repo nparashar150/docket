@@ -71,6 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         clear: { state.state.borrowedDockPrefs = nil })
         }
 
+        startUpdateChecks(state)
+
         SystemDockSettings.shared.start()
         SystemMetrics.shared.start()
         NetworkMetrics.shared.start()
@@ -102,6 +104,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DockStrut.releaseNow(borrowed)
         }
         state?.saveNow()
+    }
+
+    /// Asks once, then remembers.
+    ///
+    /// Checking for releases is the only thing Docket does unprompted that
+    /// talks to a server, and it necessarily tells GitHub that someone ran it.
+    /// Everything else that leaves this machine is there because the user
+    /// added a weather or stocks widget. So it is asked rather than assumed,
+    /// and asked once: a nil answer means the question has not been put yet.
+    ///
+    /// Deferred so the question does not land while the shelf is still
+    /// appearing, which would make it the first thing a new user ever sees.
+    private func startUpdateChecks(_ state: AppState) {
+        guard state.state.checkForUpdates != false else { return }
+        if state.state.checkForUpdates == true {
+            UpdateService.shared.start()
+            return
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard self != nil else { return }
+            let alert = NSAlert()
+            alert.messageText = "Check for new versions of Docket?"
+            alert.informativeText = """
+                Docket can look for new releases once a day and tell you when \
+                one appears, in its menu bar item. Updates are never installed \
+                for you.
+
+                Checking asks GitHub for the latest version number, and \
+                nothing else is sent. You can change this in Settings.
+                """
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Check for Updates")
+            alert.addButton(withTitle: "Don't Check")
+            NSApp.activate(ignoringOtherApps: true)
+            let wanted = alert.runModal() == .alertFirstButtonReturn
+            state.state.checkForUpdates = wanted
+            if wanted { UpdateService.shared.start() }
+        }
     }
 
     private func applyAppearance() {
