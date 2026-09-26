@@ -315,7 +315,11 @@ public enum WidgetCatalog {
             return CGSize(width: Double(devices * 44 + (devices - 1) * 8 + 20),
                           height: devices > 2 ? 116 : 62)
         case .system:
-            let metrics = max(1, cfg.strings("metrics").count)
+            // With the catalog's default, like every other reader of this key.
+            // Without it a widget carrying no stored `metrics` measured as one
+            // column and drew two, so the tile was sized too narrow for its
+            // own contents.
+            let metrics = max(1, cfg.strings("metrics", default: ["cpu", "memory"]).count)
             let layout = cfg.string("layout", default: "numbers")
             if layout == "bars" { return CGSize(width: 168, height: 62) }
             let rings = layout == "rings"
