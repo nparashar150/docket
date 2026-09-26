@@ -18,6 +18,7 @@ public actor NativeDockAdapter {
         case writeFailed
         case verificationFailed(expected: Int, found: Int)
         case rolledBack(reason: String)
+        case dockDidNotRestart
 
         public var errorDescription: String? {
             switch self {
@@ -27,6 +28,8 @@ public actor NativeDockAdapter {
                 "Couldn't write the Dock layout."
             case .verificationFailed(let expected, let found):
                 "The Dock restarted with \(found) items instead of \(expected)."
+            case .dockDidNotRestart:
+                "The Dock did not come back after being restarted."
             case .rolledBack(let reason):
                 "Couldn't apply that layout, so your previous Dock was restored. (\(reason))"
             }
@@ -65,7 +68,12 @@ public actor NativeDockAdapter {
 
         do {
             try write(tiles)
-            try restartDock()
+            let previous = try restartDock()
+            // The Dock coming back is the part that can actually fail. Reading
+            // the preference back only ever confirmed our own write.
+            guard await waitForNewDock(replacing: previous) else {
+                throw Failure.dockDidNotRestart
+            }
             let applied = try await readAfterRestart(expecting: tiles)
             guard applied.count == tiles.count else {
                 throw Failure.verificationFailed(expected: tiles.count, found: applied.count)
@@ -90,12 +98,37 @@ public actor NativeDockAdapter {
     /// The Dock only reads `persistent-apps` at launch, so applying a layout
     /// means restarting it. `NSRunningApplication.terminate()` is preferred
     /// over `killall` - no subprocess, and it is the documented API.
-    public func restartDock() throws {
+    @discardableResult
+    public func restartDock() throws -> [pid_t] {
         let docks = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock")
         guard !docks.isEmpty else { throw Failure.writeFailed }
+        let before = docks.map(\.processIdentifier)
         // forceTerminate, not terminate: a graceful quit gives the Dock the
         // chance to flush its own cached prefs over the ones just written.
         for dock in docks { dock.forceTerminate() }
+        return before
+    }
+
+    /// Waits for launchd to bring a *different* Dock back.
+    ///
+    /// The previous verification read the preference it had just written and
+    /// compared it to itself, so it passed whatever the Dock did, including
+    /// not restarting at all. This is the part that can genuinely fail: if no
+    /// new process appears, the layout was written and nothing is using it.
+    ///
+    /// What still cannot be checked is what the Dock actually drew. Nothing
+    /// public reports its tiles, so "verified" here means the preference is in
+    /// place and a new Dock started after it, which is as far as the platform
+    /// allows.
+    private func waitForNewDock(replacing old: [pid_t]) async -> Bool {
+        for _ in 0 ..< 50 {                                  // ~5s ceiling
+            try? await Task.sleep(for: .milliseconds(100))
+            let now = NSRunningApplication
+                .runningApplications(withBundleIdentifier: "com.apple.dock")
+                .map(\.processIdentifier)
+            if let pid = now.first, !old.contains(pid) { return true }
+        }
+        return false
     }
 
     /// launchd brings the Dock straight back; poll until its prefs reflect the
