@@ -420,3 +420,76 @@ final class ShelfStateGroupTests: XCTestCase {
         XCTAssertEqual(once, shelf)
     }
 }
+
+/// Putting an item next to another one.
+///
+/// Spacers were drawn, sized, labelled and converted both ways to Apple's own
+/// spacer tiles, with no way for anyone to make one. Adding that meant
+/// inserting rather than appending, because a spacer is entirely about where
+/// it sits: appended to the end it is invisible, and the feature would have
+/// looked broken rather than absent.
+final class ShelfInsertTests: XCTestCase {
+
+    private func app(_ name: String) -> DockItem {
+        .app(id: UUID(), bundleID: "com.example.\(name)",
+             ref: FileRef(url: URL(fileURLWithPath: "/Applications/\(name).app")))
+    }
+
+    /// Mirrors what `AppState.insertItem(_:after:)` does to the array.
+    private func insert(_ item: DockItem, after anchor: UUID,
+                        into items: [DockItem]) -> [DockItem] {
+        var result = items
+        if let slot = result.firstIndex(where: { $0.id == anchor }) {
+            result.insert(item, at: slot + 1)
+        } else {
+            result.append(item)
+        }
+        return result
+    }
+
+    func testAnItemLandsDirectlyAfterItsAnchor() {
+        let a = app("A"), b = app("B"), c = app("C")
+        let spacer = DockItem.spacer(id: UUID(), size: .regular)
+
+        let result = insert(spacer, after: b.id, into: [a, b, c])
+        XCTAssertEqual(result.map(\.id), [a.id, b.id, spacer.id, c.id])
+    }
+
+    func testInsertingAfterTheLastItemPutsItAtTheEnd() {
+        let a = app("A"), b = app("B")
+        let spacer = DockItem.spacer(id: UUID(), size: .small)
+
+        let result = insert(spacer, after: b.id, into: [a, b])
+        XCTAssertEqual(result.map(\.id), [a.id, b.id, spacer.id])
+    }
+
+    /// The anchor can be a running app that was never pinned, so it is not in
+    /// the profile at all. Appending is the honest fallback; dropping the
+    /// item would look like the menu did nothing.
+    func testAnUnknownAnchorAppendsRatherThanDropping() {
+        let a = app("A")
+        let spacer = DockItem.spacer(id: UUID(), size: .regular)
+
+        let result = insert(spacer, after: UUID(), into: [a])
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result.last?.id, spacer.id)
+    }
+
+    func testInsertingIntoAnEmptyProfileStillWorks() {
+        let spacer = DockItem.spacer(id: UUID(), size: .regular)
+        XCTAssertEqual(insert(spacer, after: UUID(), into: []).count, 1)
+    }
+
+    /// Two spacers in a row are a legitimate arrangement, so nothing may
+    /// coalesce or deduplicate them.
+    func testSpacersDoNotCollapseIntoEachOther() {
+        let a = app("A")
+        let first = DockItem.spacer(id: UUID(), size: .regular)
+        let second = DockItem.spacer(id: UUID(), size: .small)
+
+        var items = insert(first, after: a.id, into: [a])
+        items = insert(second, after: first.id, into: items)
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items.map(\.id), [a.id, first.id, second.id])
+    }
+}
