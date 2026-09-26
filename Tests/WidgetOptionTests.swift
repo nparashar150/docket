@@ -59,6 +59,50 @@ final class WidgetOptionTests: XCTestCase {
         }
     }
 
+    // MARK: Nothing offered that nothing reads
+
+    /// Every configurable key becomes a control in the Widgets tab, so a key
+    /// the widget never reads is a switch that persists and changes nothing.
+    /// Eleven of them shipped that way across four widgets.
+    ///
+    /// Pinned as a list rather than inferred, because the reader lives in a
+    /// view the test target cannot see. The list is the promise: adding a key
+    /// here means committing to read it, and the failure message says so.
+    func testNoWidgetOffersAnOptionItDoesNotRead() {
+        let expected: [WidgetKind: Set<String>] = [
+            .world: ["city", "zone"],
+            .progress: ["period"],
+            .countdown: ["duration", "name", "presets"],
+            .alarm: ["time", "name"],
+            .hydration: ["duration"],
+            .calendar: ["allDay", "calendars"],
+            .reminders: ["list"],
+            .notes: ["text", "color"],
+            .music: ["mini", "previous", "next", "backward", "forward",
+                     "skip", "spotify", "apple", "browsers"],
+            .battery: ["devices"],
+            .system: ["chart", "metrics"],
+            .network: ["display", "chart"],
+            .shortcut: ["name"],
+            .stock: ["symbol", "symbols", "chart"],
+            .watchlist: ["symbols"],
+            .weather: ["city", "fahrenheit"],
+        ]
+
+        for kind in WidgetKind.allCases {
+            guard WidgetCatalog.entry(kind) != nil else { continue }
+            let offered = Set(WidgetCatalog.configurableKeys(kind))
+            let promised = expected[kind] ?? []
+            XCTAssertEqual(offered, promised, """
+                \(kind.rawValue) offers \(offered.sorted()) but this test \
+                expects \(promised.sorted()). If you added an option, read it \
+                somewhere and add it here. If you removed one, drop it here \
+                too. An option nothing reads is a control that persists and \
+                does nothing.
+                """)
+        }
+    }
+
     // MARK: Free-form lists
 
     /// The watchlist editor is a comma separated field, so the parse is the
