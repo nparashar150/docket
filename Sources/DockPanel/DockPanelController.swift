@@ -234,11 +234,26 @@ final class DockPanelController: NSObject, NSWindowDelegate {
     private func hiddenOrigin(for size: CGSize) -> CGPoint {
         let frame = targetScreen.frame
         let shown = revealedOrigin(for: size)
+        let peek = handlePeek
         return switch app.effectivePosition {
-        case .bottom: CGPoint(x: shown.x, y: frame.minY - size.height)
-        case .left: CGPoint(x: frame.minX - size.width, y: shown.y)
-        case .right: CGPoint(x: frame.maxX, y: shown.y)
+        case .bottom: CGPoint(x: shown.x, y: frame.minY - size.height + peek)
+        case .left: CGPoint(x: frame.minX - size.width + peek, y: shown.y)
+        case .right: CGPoint(x: frame.maxX - peek, y: shown.y)
         }
+    }
+
+    /// How much of the shelf stays on screen while hidden.
+    ///
+    /// "Show handle when hidden" was read by nothing: hiding moved the panel
+    /// entirely off the edge, so there was never a handle to show and the
+    /// toggle had no effect in either position.
+    ///
+    /// Three points, which is enough to see and to aim at without being a
+    /// stripe along the edge of the screen. The reveal still happens on
+    /// approach rather than on hitting it, so this is a marker of where the
+    /// shelf is rather than the only way to bring it back.
+    private var handlePeek: CGFloat {
+        app.state.customDock.showHandleWhenHidden ? 3 : 0
     }
 
     private func applyPlacement(animated: Bool) {

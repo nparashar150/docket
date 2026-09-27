@@ -50,7 +50,7 @@ public final class AppState {
     public private(set) var lastError: String?
     public private(set) var isApplying = false
 
-    private let store = Store()
+    private let store: Store
     private let nativeDock = NativeDockAdapter()
     private var saveTask: Task<Void, Never>?
     /// Holds `self` weakly and exits on its own once AppState goes away, so
@@ -59,7 +59,19 @@ public final class AppState {
     private var tickTask: Task<Void, Never>?
 
     public init() {
-        self.state = Store().load()
+        self.store = Store()
+        self.state = store.load()
+        startTicking()
+    }
+
+    /// Reads and writes somewhere other than the user's own setup.
+    ///
+    /// For the shot renderer, which needs a shelf full of widgets to
+    /// photograph and must not build it out of, or on top of, whatever the
+    /// person running it actually has.
+    public init(store: Store) {
+        self.store = store
+        self.state = store.load()
         startTicking()
     }
 
