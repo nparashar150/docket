@@ -44,7 +44,9 @@ macOS anchors a TCC grant to the app's **code signature**. With no certificate, 
 Consequences for an unsigned or ad-hoc `.dmg`:
 
 - Accessibility, Full Disk Access, Screen Recording and Automation all break on every update a user installs. Somebody who granted Accessibility in 0.3 loses it in 0.4 and gets no explanation.
-- Keychain item ACLs bind to the same designated requirement, so a rolling identity is expected to produce a "wants to use your confidential information" prompt per item on every release. **UNCONFIRMED**, and worth testing early, because it decides whether the credential store in §4.1 is pleasant or hostile.
+- Keychain item ACLs bind to the same designated requirement, so a rolling identity was expected to produce a "wants to use your confidential information" prompt per item on every release. **MEASURED, and the answer is no, for a reason that is worse than the question.** Two ad-hoc binaries were built from the same source with one string changed, giving different cdhashes (`designated => cdhash H"f219..."` against `H"cac3..."`). The second read the generic password the first wrote: status 0, no prompt. But the control says why: `security find-generic-password -w`, an unrelated system binary, read the same secret with exit 0. There is no access restriction to survive. Adding an explicit `SecAccessCreate` trusted-application list naming only the first binary did not change either result.
+- **VERIFIED:** the data-protection keychain, which is the one that would restrict by application, is closed to an ad-hoc build. `SecItemAdd` with `kSecUseDataProtectionKeychain` returns **-34018, errSecMissingEntitlement**. It needs `keychain-access-groups`, which needs a team identifier, which needs G5. So on an unsigned release the only keychain available is the legacy file-based one described above.
+- Not established: whether a prompt-needing item would have been detected at all. The intended control for that required the data-protection keychain and hit the same -34018. The conclusion above rests on the `security` read instead, which shows no restriction exists rather than that a prompt was suppressed.
 - **VERIFIED:** an ad-hoc binary that *claims* a restricted entitlement is killed by AMFI at launch. `codesign -s - --entitlements` with `com.apple.mediaremote.send-playback-commands` exits **137**, no output, no diagnostic. "Just add the entitlement" is never an escape hatch, for anything, ever.
 - macOS 26.1 and later will not list a non-bundled executable in the Screen Recording pane at all. Docket is a proper `.app` bundle, so this is fine today, but the permission panes are a moving target on 26.x.
 
@@ -76,7 +78,7 @@ This is non-negotiable and the reason is boring. `WidgetConfig.Value` is string,
 
 Surfaces in the UI as a Connections list: service, account label, last successful use, Revoke. It never shows a key back, only its last four characters.
 
-**Risk:** the ad-hoc ACL re-prompt from §2.1. Test this in week one. If it is hostile, the fallback is a `0600` file in the support directory, which is genuinely weaker and must be labelled as such in the UI rather than quietly substituted.
+**Risk: settled, and it moved.** The ad-hoc ACL re-prompt from §2.1 does not happen, so the `0600` fallback is not needed for that reason and G1 is not hostile to build. What replaced it is a copy problem. On an unsigned release the item lands in the login keychain with no application restriction, so any process running as the user reads the token with one `security` command, and the data-protection keychain that would fix this is closed without G5. The store is still right, because it keeps secrets out of `state.json`, out of Time Machine as plaintext and out of any state file pasted into a bug report. But the Connections UI must not say or imply "only Docket can read this" until G5 ships, because on today's builds that is not true.
 
 ### G2. Generic HTTP polling service. Effort: M
 
