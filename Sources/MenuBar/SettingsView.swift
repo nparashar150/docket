@@ -339,6 +339,7 @@ struct SettingsView: View {
                           ? "While matching the macOS Dock, the shelf hides when the Dock does."
                           : "Reveal the shelf when the pointer reaches its screen edge.")
                 Toggle("Show handle when hidden", isOn: $state.customDock.showHandleWhenHidden)
+                    .help("Leaves a sliver of the shelf on screen so you can see where it is. Reaching the edge still reveals it either way.")
                     .disabled(!state.customDock.autoHide)
                     .help("A small visible handle while hidden. The edge still reveals the Dock without it.")
                 Toggle("Hide when the macOS Dock appears", isOn: $state.customDock.hideWhenMacOSDockAppears)
