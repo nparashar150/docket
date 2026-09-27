@@ -2,12 +2,49 @@ import Observation
 import SwiftUI
 
 /// The Focus Timer is one timer for the whole app, not one per widget: two
-/// timer tiles on the shelf show the same countdown. Until app state is wired
-/// up, every tile reads the shared state from here.
+/// timer tiles on the shelf show the same countdown.
+///
+/// This used to end "until app state is wired up", and it never was. So the
+/// six Focus Timer controls in Settings wrote `state.timer`, which nothing
+/// read, while every tile and panel read this, which nothing saved. Changing
+/// the work length did nothing, and a session was forgotten on quit.
+///
+/// Wired through `WidgetWriter`'s shape: the provider does not know about
+/// persistence, and the app connects the two ends at launch.
 @MainActor @Observable
 final class TimerStateProvider {
     static let shared = TimerStateProvider()
-    var state = TimerState()
+
+    var state = TimerState() {
+        didSet {
+            // Not while adopting, or writing the persisted value back in
+            // would bounce straight out again.
+            guard !adopting else { return }
+            onChange?(state)
+        }
+    }
+
+    /// Called when the timer changes, so it reaches the state file.
+    @ObservationIgnored var onChange: ((TimerState) -> Void)?
+
+    @ObservationIgnored private var adopting = false
+
+    /// Takes a value from the persisted state without echoing it back.
+    ///
+    /// A running countdown is deliberately not disturbed: `deadline` and
+    /// `paused` describe a session in progress, and a settings edit that
+    /// silently restarted it would lose the session the user is in.
+    func adopt(_ incoming: TimerState) {
+        adopting = true
+        defer { adopting = false }
+        var next = incoming
+        if state.deadline != nil || state.paused != nil {
+            next.deadline = state.deadline
+            next.paused = state.paused
+            next.duration = state.duration
+        }
+        state = next
+    }
 }
 
 /// A click anywhere on the card opens the timer's panel, so the card belongs

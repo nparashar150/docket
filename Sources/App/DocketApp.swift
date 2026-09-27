@@ -47,6 +47,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.onMenuBarSettingsChanged = { [weak self] in self?.menuBar.refreshButton() }
         state.onAppearanceChanged = { [weak self] in self?.applyAppearance() }
 
+        // The Focus Timer runs through a shared provider the widgets read,
+        // and Settings edits the persisted copy. Neither knew about the
+        // other, so the six controls in Settings changed nothing and a
+        // session was forgotten on quit. Both ends are connected here.
+        TimerStateProvider.shared.adopt(state.state.timer)
+        TimerStateProvider.shared.onChange = { [state] timer in state.state.timer = timer }
+        state.onTimerChanged = { timer in TimerStateProvider.shared.adopt(timer) }
+
         applyAppearance()
         if state.state.setup != .macOSDockOnly {
             shelf.show()

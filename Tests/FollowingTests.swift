@@ -117,3 +117,82 @@ final class FollowingTests: XCTestCase {
              ref: FileRef(url: URL(fileURLWithPath: "/Applications/\(bundleID).app")))
     }
 }
+
+/// The Focus Timer, which is one timer for the whole app.
+///
+/// The six controls in Settings wrote `state.timer`, which nothing read, while
+/// every tile and panel read a shared in-memory provider, which nothing saved.
+/// So changing the work length did nothing and a session was forgotten on
+/// quit. These cover the rules that connecting them has to respect.
+final class TimerStateTests: XCTestCase {
+
+    /// Mirrors `TimerStateProvider.adopt`: a running session is not disturbed
+    /// by a settings edit.
+    private func adopt(_ incoming: TimerState, into current: TimerState) -> TimerState {
+        var next = incoming
+        if current.deadline != nil || current.paused != nil {
+            next.deadline = current.deadline
+            next.paused = current.paused
+            next.duration = current.duration
+        }
+        return next
+    }
+
+    func testSettingsReachAnIdleTimer() {
+        var incoming = TimerState()
+        incoming.work = 45
+        let result = adopt(incoming, into: TimerState())
+        XCTAssertEqual(result.work, 45)
+    }
+
+    /// Editing the work length while a session runs must not restart it. The
+    /// new length applies to the next one.
+    func testARunningSessionSurvivesASettingsEdit() {
+        var running = TimerState()
+        running.deadline = Date(timeIntervalSinceNow: 600)
+        running.duration = 1500
+
+        var incoming = TimerState()
+        incoming.work = 45
+
+        let result = adopt(incoming, into: running)
+        XCTAssertEqual(result.work, 45, "the setting still lands")
+        XCTAssertEqual(result.deadline, running.deadline, "and the session is untouched")
+        XCTAssertEqual(result.duration, running.duration)
+    }
+
+    /// A paused session is a session too: it banks its remaining time, and
+    /// losing that is the same as losing a running one.
+    func testAPausedSessionAlsoSurvives() {
+        var paused = TimerState()
+        paused.paused = 420
+
+        var incoming = TimerState()
+        incoming.rest = 10
+
+        let result = adopt(incoming, into: paused)
+        XCTAssertEqual(result.rest, 10)
+        XCTAssertEqual(result.paused, 420)
+    }
+
+    /// An idle timer takes the incoming session fields as they are, which is
+    /// what makes a restored state file resume where it left off.
+    func testAnIdleTimerTakesAStoredSession() {
+        var stored = TimerState()
+        stored.deadline = Date(timeIntervalSinceNow: 300)
+
+        let result = adopt(stored, into: TimerState())
+        XCTAssertEqual(result.deadline, stored.deadline)
+    }
+
+    func testTheTimerSurvivesTheStateFile() throws {
+        var state = PersistedState()
+        state.timer.work = 45
+        state.timer.sessions = 6
+
+        let data = try JSONEncoder().encode(state)
+        let read = try JSONDecoder().decode(PersistedState.self, from: data)
+        XCTAssertEqual(read.timer.work, 45)
+        XCTAssertEqual(read.timer.sessions, 6)
+    }
+}

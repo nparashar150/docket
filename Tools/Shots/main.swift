@@ -373,6 +373,17 @@ private func makeShelfState() -> AppState? {
     }
 
     var profile = DockProfile(kind: .customDock, name: "Showcase", scale: shelfScale)
+    // Widgets first, then the apps, which is the order the shelf is built for:
+    // it puts the size grip on the seam between the two, where the shelf keeps
+    // it, so the image carries the handle the shelf is actually resized by.
+    for instance in [widget(.clock),
+                     widget(.world, ["zone": .string("Asia/Tokyo"),
+                                     "city": .string("Tokyo")]),
+                     widget(.system, ["metrics": .list([.string("cpu"),
+                                                        .string("memory")])]),
+                     widget(.notes, ["text": .string("Renew the domain")])] {
+        profile.items.append(.widget(instance))
+    }
     for bundleID in ["com.apple.finder", "com.apple.Safari", "com.apple.mail",
                      "com.apple.Terminal", "com.apple.systempreferences"] {
         // Skipped rather than drawn dead: an app that is genuinely not
@@ -384,15 +395,6 @@ private func makeShelfState() -> AppState? {
             continue
         }
         profile.items.append(.app(id: UUID(), bundleID: bundleID, ref: .capture(url)))
-    }
-    profile.items.append(.spacer(id: UUID(), size: .small))
-    for instance in [widget(.clock),
-                     widget(.world, ["zone": .string("Asia/Tokyo"),
-                                     "city": .string("Tokyo")]),
-                     widget(.system, ["metrics": .list([.string("cpu"),
-                                                        .string("memory")])]),
-                     widget(.notes, ["text": .string("Renew the domain")])] {
-        profile.items.append(.widget(instance))
     }
 
     let shelf = AppState(store: Store(directory: directory))
