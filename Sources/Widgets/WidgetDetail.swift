@@ -315,10 +315,10 @@ enum WidgetDetail {
     /// than the app the widget is about.
     static func exists(for kind: WidgetKind) -> Bool {
         switch kind {
-        // Everything with a tile and something to say. `.shortcut` and
-        // `.aiUsage` are the only kinds left out, and both are stubs - no
-        // tile, no service, nothing a panel could honestly show.
-        case .shortcut, .aiUsage:
+        // Everything with a tile and something to say. `.aiUsage` is the
+        // only kind left out, and it is a stub - no tile, no service,
+        // nothing a panel could honestly show.
+        case .aiUsage:
             false
         default:
             true

@@ -55,7 +55,7 @@ shot is a live reading taken at the moment of capture.
 ## Panels
 
 Click a widget and a panel opens, anchored to the tile it came from with a tail
-pointing back at it. Twenty-two of the twenty-four widget kinds have one.
+pointing back at it. Twenty-three of the twenty-four widget kinds have one.
 Dismiss with a click outside, Escape, or Command-W.
 
 Every panel below is a real view of the real thing, not a mockup. Each caption
@@ -160,13 +160,13 @@ nothing else.</sub>
   change. Drag the size slider in System Settings and the shelf moves with it.
   Pinned apps are mirrored the same way. Resize the shelf by dragging and only
   the *size* stops following; the edge and the hiding still do.
-- **Twenty-four widget kinds**, nineteen of which draw a live tile today: clock,
+- **Twenty-four widget kinds**, twenty of which draw a live tile today: clock,
   world clock, stopwatch, focus timer, time progress, countdown, alarm,
   hydration, sticky notes, calendar, reminders, battery, system activity,
-  network, AirDrop, stocks, watchlist, weather and Now Playing. Twenty-two open
-  a detail panel. They are usable, not just readable: timers start and stop,
-  notes are typed in place, the alarm toggles, and the metric and symbol tiles
-  page through what they show.
+  network, AirDrop, stocks, watchlist, weather, Shortcut and Now Playing.
+  Twenty-three open a detail panel. They are usable, not just readable:
+  timers start and stop, notes are typed in place, the alarm toggles, a
+  shortcut runs, and the metric and symbol tiles page through what they show.
 - **App groups.** Drop one icon onto another and hold, the way iOS makes a
   folder. Tinted, named, with a 2x2 preview grid in a single Dock slot, opening
   into a panel you can drag icons back out of. A group left holding one item
@@ -321,11 +321,11 @@ tests as two separate steps.
 
 ## Known limits
 
-- **Five widget kinds cannot be added.** AI usage, Shortcut, Stripe, Paddle and
-  Shopify are declared kinds the library does not offer, so none of them can be
-  put on a shelf in this build. Stripe, Paddle and Shopify do have working
-  detail panels behind them; the other two do not. All five fall back to a
-  labelled "not yet" tile, which nothing currently reaches.
+- **Four widget kinds cannot be added.** AI usage, Stripe, Paddle and Shopify
+  are declared kinds the library does not offer, so none of them can be put on
+  a shelf in this build. Stripe, Paddle and Shopify do have working detail
+  panels behind them; AI usage does not. All four fall back to a labelled
+  "not yet" tile, which nothing currently reaches.
 - **The revenue widgets have no service behind them.** Stripe, Paddle and Shopify
   are all network-backed and this build ships no client for any of them. Their
   panel deliberately states that it is unconnected rather than drawing a

@@ -49,10 +49,12 @@ struct WidgetDetailBody: View {
             AirDropDetail(instance: instance, context: context)
         case .reminders:
             RemindersDetail(instance: instance, context: context)
+        case .shortcut:
+            ShortcutDetail(instance: instance, context: context)
         default:
-            // Only `.shortcut` and `.aiUsage` reach this now, and both are
-            // stubs: no tile, no service, nothing to read. Better an honest
-            // line than a panel that explains its own absence.
+            // Only `.aiUsage` reaches this now, and it is a stub: no tile,
+            // no service, nothing to read. Better an honest line than a
+            // panel that explains its own absence.
             Text("No further detail for this widget.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)

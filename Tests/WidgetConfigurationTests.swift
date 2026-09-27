@@ -452,15 +452,35 @@ final class WidgetConfigurationTests: XCTestCase {
     ///
     /// Calendar and Reminders are listed now that they have tiles. They ask
     /// for nothing when drawn: without access they show that they have none,
-    /// which is the same contract Now Playing has always had.
+    /// which is the same contract Now Playing has always had. Shortcut joined
+    /// them once it had a tile, a panel and a service to run the thing.
+    ///
+    /// The placeholder set is derived rather than written down. Spelling it
+    /// out was what made the old version of this test hollow: `shippable` is
+    /// `entries.filter(\.selfContained)`, so a kind with no entry can never
+    /// appear in it whatever anyone does to the flags, and Shortcut was the
+    /// only listed kind the assertion could ever have caught.
     func testTheLibraryOnlyOffersKindsThatCanBeDrawn() {
-        let placeholders: Set<WidgetKind> = [.aiUsage, .shortcut, .stripe, .paddle, .shopify]
+        // No catalog entry means `WidgetCatalog.make` returns nil, which is
+        // the only thing keeping these off the shelf. Pinned as a set so that
+        // giving one an entry without also giving it a tile fails here rather
+        // than shipping a "still to come" card in the library.
+        let unbuilt: Set<WidgetKind> = [.aiUsage, .stripe, .paddle, .shopify]
+        XCTAssertEqual(Set(WidgetKind.allCases.filter { WidgetCatalog.entry($0) == nil }),
+                       unbuilt,
+                       "A kind gained or lost a catalog entry; it needs a tile before it gains one")
+
         let shippable = Set(WidgetCatalog.shippable.map(\.kind))
 
-        for kind in placeholders {
+        for kind in unbuilt {
             XCTAssertFalse(shippable.contains(kind),
                            "\(kind) has no tile, so the library must not offer it")
         }
+        // The other direction, which is what actually regressed before: a
+        // kind that has a tile must not be left out of the library by a
+        // stale flag.
+        XCTAssertTrue(shippable.contains(.shortcut),
+                      "Shortcut has a tile and a panel, so the library must offer it")
         for entry in WidgetCatalog.shippable {
             XCTAssertTrue(entry.selfContained, "\(entry.kind)")
         }
