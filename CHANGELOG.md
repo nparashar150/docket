@@ -3,6 +3,18 @@
 The 0.1.0 entry was written by hand. Everything after it is generated from the
 commits on `main`, which is why the voice changes partway down.
 
+## [0.1.4](https://github.com/nparashar150/docket/compare/v0.1.3...v0.1.4) (2026-09-27)
+
+
+### Features
+
+* finish the Shortcut stub so a shortcut can be run from the shelf ([#133](https://github.com/nparashar150/docket/issues/133)) ([20db8cc](https://github.com/nparashar150/docket/commit/20db8ccf792751d9c551c31fc25b04427e70b31d))
+
+
+### Bug Fixes
+
+* stop describing a tile nobody can reach as what people will see ([#130](https://github.com/nparashar150/docket/issues/130)) ([5df5cca](https://github.com/nparashar150/docket/commit/5df5cca8c1a11280d62660b86ce7274fb48cb180))
+
 ## [0.1.3](https://github.com/nparashar150/docket/compare/v0.1.2...v0.1.3) (2026-09-27)
 
 
