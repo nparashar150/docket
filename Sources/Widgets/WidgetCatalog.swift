@@ -126,7 +126,7 @@ public enum WidgetCatalog {
 
         Entry(kind: .shortcut, name: "Shortcut", category: .system,
               defaults: c(["name": .string("")]),
-              variants: [], supportsCompact: false, selfContained: false),
+              variants: [], supportsCompact: false, selfContained: true),
 
         Entry(kind: .airdrop, name: "AirDrop", category: .system, defaults: c([:]),
               variants: [], supportsCompact: false, selfContained: true),
