@@ -58,79 +58,79 @@ Click a widget and a panel opens, anchored to the tile it came from with a tail
 pointing back at it. Twenty-two of the twenty-four widget kinds have one.
 Dismiss with a click outside, Escape, or Command-W.
 
-Every panel below is a real capture of the real view. Captions say which are a
-live reading and which are the widget library's sample data, because two of them
-are sample.
+Every panel below is a real view of the real thing, not a mockup. Each caption
+says what its panel is showing, and says so plainly where that is the widget
+library's sample data rather than a live reading.
 
 <table>
   <tr>
     <td width="33%" valign="top">
       <img src="docs/images/clock.png" alt="Clock panel" width="100%"><br>
-      <sub><b>Clock</b><br>Live. This machine's own clock, zone and date.</sub>
+      <sub><b>Clock</b><br>Live. This machine's own clock, its time zone and the day's date.</sub>
     </td>
     <td width="33%" valign="top">
       <img src="docs/images/world-clock.png" alt="World clock panel" width="100%"><br>
-      <sub><b>World Clock</b><br>Live. The real overlap between here and Tokyo, done by the zone's own rules.</sub>
+      <sub><b>World Clock</b><br>Live. The real overlap between here and Tokyo, worked out by the zone's own rules.</sub>
     </td>
     <td width="33%" valign="top">
       <img src="docs/images/time-progress.png" alt="Time progress panel" width="100%"><br>
-      <sub><b>Time Progress</b><br>Live. How far through the day, the month and the year the capture happened.</sub>
+      <sub><b>Time Progress</b><br>Live. How far through the day, the month and the year it had got by then.</sub>
     </td>
   </tr>
   <tr>
     <td valign="top">
       <img src="docs/images/weather.png" alt="Weather panel" width="100%"><br>
-      <sub><b>Weather</b><br>Live. A real MET Norway forecast, for Oslo.</sub>
+      <sub><b>Weather</b><br>Live. A real MET Norway forecast for Oslo, hour by hour for twelve hours.</sub>
     </td>
     <td valign="top">
       <img src="docs/images/stock.png" alt="Stock panel" width="100%"><br>
-      <sub><b>Stock</b><br>Live. A real quote, fetched at capture time.</sub>
+      <sub><b>Stock</b><br>Live. A real quote, fetched from the network when the panel opened.</sub>
     </td>
     <td valign="top">
       <img src="docs/images/watchlist.png" alt="Watchlist panel" width="100%"><br>
-      <sub><b>Watchlist</b><br>Live. Several symbols off the same fetch.</sub>
+      <sub><b>Watchlist</b><br>Live. Several symbols read off the same single fetch, shown as one list.</sub>
     </td>
   </tr>
   <tr>
     <td valign="top">
       <img src="docs/images/focus-timer.png" alt="Focus timer panel" width="100%"><br>
-      <sub><b>Focus Timer</b><br>Live, and genuinely running. Start and stop from the panel.</sub>
+      <sub><b>Focus Timer</b><br>Live, and genuinely running. Start it and stop it from the panel itself.</sub>
     </td>
     <td valign="top">
       <img src="docs/images/countdown.png" alt="Countdown panel" width="100%"><br>
-      <sub><b>Countdown</b><br>Live. A real deadline set when the capture began.</sub>
+      <sub><b>Countdown</b><br>Live. A real deadline, with the time left counted against the clock.</sub>
     </td>
     <td valign="top">
       <img src="docs/images/stopwatch.png" alt="Stopwatch panel" width="100%"><br>
-      <sub><b>Stopwatch</b><br>Live. Running since the capture launched, which is exactly as long as it says.</sub>
+      <sub><b>Stopwatch</b><br>Live and running. The elapsed figure is real, not a posed number.</sub>
     </td>
   </tr>
   <tr>
     <td valign="top">
       <img src="docs/images/alarm.png" alt="Alarm panel" width="100%"><br>
-      <sub><b>Alarm</b><br>Live. The time to it computed against the real clock.</sub>
+      <sub><b>Alarm</b><br>Live. The time remaining is computed against the real system clock.</sub>
     </td>
     <td valign="top">
       <img src="docs/images/hydration.png" alt="Hydration panel" width="100%"><br>
-      <sub><b>Hydration</b><br>Live, with nothing logged yet, which is the state a new widget is actually in.</sub>
+      <sub><b>Hydration</b><br>Live, with nothing logged yet, which is the state a new widget sits in.</sub>
     </td>
     <td valign="top">
       <img src="docs/images/sticky-note.png" alt="Sticky note panel" width="100%"><br>
-      <sub><b>Sticky Note</b><br>Typed in place. The words are the widget's content, not a reading.</sub>
+      <sub><b>Sticky Note</b><br>Typed in place. The words are the widget's own content, not a reading.</sub>
     </td>
   </tr>
   <tr>
     <td valign="top">
       <img src="docs/images/system-activity.png" alt="System activity panel" width="100%"><br>
-      <sub><b>System Activity</b><br>Live CPU, memory and disk. The graph is a genuinely sampled minute.</sub>
+      <sub><b>System Activity</b><br>Live CPU, memory and disk, with the graph a genuinely sampled minute.</sub>
     </td>
     <td valign="top">
       <img src="docs/images/network.png" alt="Network activity panel" width="100%"><br>
-      <sub><b>Network Activity</b><br><i>Sample data.</i> The sampler is real, but a capture machine is idle and a flat line shows nothing.</sub>
+      <sub><b>Network Activity</b><br><i>Sample data.</i> The sampler is real, but an idle machine draws a flat line that shows nothing.</sub>
     </td>
     <td valign="top">
       <img src="docs/images/battery.png" alt="Battery panel" width="100%"><br>
-      <sub><b>Battery</b><br><i>Sample data.</i> A live read would list the capture machine's own accessories.</sub>
+      <sub><b>Battery</b><br><i>Sample data.</i> A live read would list this machine's own accessories by name.</sub>
     </td>
   </tr>
   <tr>
@@ -140,9 +140,7 @@ are sample.
     </td>
     <td valign="top">
       <img src="docs/images/stripe.png" alt="Stripe revenue panel showing that it is not connected" width="100%"><br>
-      <sub><b>Stripe</b><br>The empty state, on purpose. This build ships no client, so the panel says so instead of drawing a plausible amount. See <a href="#known-limits">Known limits</a>.</sub>
-    </td>
-    <td valign="top">
+      <sub><b>Stripe</b><br>The empty state, on purpose. This build ships no client, so it says so. See <a href="#known-limits">Known limits</a>.</sub>
     </td>
   </tr>
 </table>
