@@ -32,6 +32,9 @@ public final class AppState {
             if state.appearance != oldValue.appearance {
                 onAppearanceChanged?()
             }
+            if state.timer != oldValue.timer {
+                onTimerChanged?(state.timer)
+            }
         }
     }
 
@@ -41,6 +44,9 @@ public final class AppState {
     /// for a relaunch, and for the app's appearance.
     @ObservationIgnored public var onMenuBarSettingsChanged: (@MainActor () -> Void)?
     @ObservationIgnored public var onAppearanceChanged: (@MainActor () -> Void)?
+    /// The Focus Timer settings, which the widgets read through their own
+    /// shared provider rather than from here.
+    @ObservationIgnored public var onTimerChanged: (@MainActor (TimerState) -> Void)?
 
     /// Ticks once a second. Widgets read this rather than each starting a
     /// timer of their own - one timer for the whole shelf.
