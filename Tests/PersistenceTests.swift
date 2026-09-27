@@ -149,6 +149,15 @@ final class PersistenceTests: XCTestCase {
         XCTAssertEqual(state.profiles.first?.name, "Everyday")
     }
 
+    /// Removing a setting must not cost anyone their file: every state file
+    /// written before today still carries the two macOS Dock keys that have
+    /// just been deleted.
+    func testAStateFileCarryingTheRemovedDockKeysStillLoads() throws {
+        try write(#"{"version": 1, "macOSDock": {"smoothSwitching": true, "autoSaveLiveDockChanges": true}}"#)
+        _ = store().load()
+        XCTAssertTrue(try quarantinedFiles().isEmpty, "a key we dropped is not a corrupt file")
+    }
+
     // MARK: Round trip
 
     func testASavedStateReadsBackTheSame() throws {

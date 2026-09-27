@@ -1,31 +1,34 @@
 import AppKit
 import SwiftUI
 
-// Renders the app's real detail panels into real, on-screen windows and prints
-// where each one landed, so `scripts/capture-shots.sh` can photograph the
-// screen region it occupies.
+// Renders the app's real views into real, on-screen windows and prints where
+// each one landed, so `scripts/capture-shots.sh` can photograph the screen
+// region it occupies. Two kinds of image: every detail panel worth showing,
+// and the shelf itself, which is the product.
 //
 // Why a window on a real display, rather than `ImageRenderer` or
 // `cacheDisplay`: a panel's surface is `VisualEffectPlate(material: .popover,
-// blending: .behindWindow)`, and behind-window vibrancy is sampled by the
-// window server from what is genuinely composited behind the window. Nothing
-// is behind an offscreen bitmap, so an offscreen render comes back as a
-// transparent - or, once flattened, black - slab with the text floating on it.
-// The material is most of what these panels look like, so the only honest
-// render is one the display has actually drawn.
+// blending: .behindWindow)` and the shelf's is macOS 26 glass, and both are
+// sampled by the window server from what is genuinely composited behind the
+// window. Nothing is behind an offscreen bitmap, so an offscreen render comes
+// back as a transparent - or, once flattened, black - slab with the text
+// floating on it. The material is most of what these surfaces look like, so
+// the only honest render is one the display has actually drawn.
 //
 // The images are documentation, and documentation that overstates the app is
-// worse than none: every panel here is the shipping view, handed either its
-// own `isPreview` sample data (the same values the widget library shows) or
-// live readings from this machine. Nothing is mocked up, and no number is
-// typed in here to flatter a screenshot.
+// worse than none. Every view here is the shipping view, handed either live
+// readings from this machine or its own `isPreview` sample data - the same
+// values the widget library shows - and each shot says on its own line which
+// of the two it is, so nothing downstream has to guess. Nothing is mocked up,
+// and no number is typed in here to flatter a screenshot.
 
 // MARK: - Protocol with the capture script
 //
-// One line per shot on stdout - `name x y width height` - then a blocking read
-// of stdin, which the script answers once `screencapture` has returned. A
-// handshake rather than a sleep because a fixed wait is either too short on a
-// busy machine or wasted on an idle one, and a truncated capture is silent.
+// One line per shot on stdout - `name x y width height source` - then a
+// blocking read of stdin, which the script answers once `screencapture` has
+// returned. A handshake rather than a sleep because a fixed wait is either too
+// short on a busy machine or wasted on an idle one, and a truncated capture is
+// silent.
 
 private func emit(_ line: String) {
     print(line)
@@ -51,53 +54,139 @@ private func topLeftRect(_ rect: CGRect) -> CGRect {
                   width: rect.width, height: rect.height)
 }
 
+/// What the numbers in an image actually are.
+///
+/// Carried out to the script and printed beside every file, because the one
+/// thing a screenshot cannot say about itself is whether it is real. A panel
+/// captured on `sample` has to be labelled wherever the image is used.
+private enum Source: String {
+    /// Live readings from this machine, this network, or this clock.
+    case live
+    /// The widget's own sample values, as the library draws them.
+    case sample
+    /// The panel's honest "nothing is connected" state.
+    case empty
+}
+
 // MARK: - The shots
 
 @MainActor
 private struct Shot {
     var name: String
     var instance: WidgetInstance
-    /// Sample values, as the widget library shows them, or live readings.
     var isPreview: Bool
-    /// Run before the window is built, for a panel whose state lives outside
-    /// its config.
+    var source: Source
+    /// Run before the window is built, for a panel whose data lives outside
+    /// its config: a service to point at a city, a fetch to wait out.
     var prepare: @MainActor () async -> Void = {}
 }
 
+/// - Parameter since: when this run began. The stopwatch and the countdown are
+///   anchored to it rather than to a figure typed in here, so both have
+///   genuinely been running for as long as the image says they have.
 @MainActor
-private func shots() -> [Shot] {
+private func shots(since started: Date) -> [Shot] {
     [
-        // Sample data. `WeatherService` would need a location, consent and a
-        // network round trip; `isPreview` is the reading the library shows.
-        Shot(name: "weather", instance: widget(.weather), isPreview: true),
+        // Live. MET Norway needs no key and no consent, so the one thing
+        // standing between this tool and a real forecast is a city - and the
+        // config carries one. Offline, the panel says "No reading yet", which
+        // is the truth about a machine with no network.
+        Shot(name: "weather",
+             instance: widget(.weather, ["city": .string("Oslo")]),
+             isPreview: false, source: .live,
+             prepare: { await WeatherService.shared.setLocation(city: "Oslo") }),
+
+        // Live: this machine's own clock, zone and date.
+        Shot(name: "clock", instance: widget(.clock), isPreview: false, source: .live),
 
         // Live: the zone's own rules do this arithmetic, so the strip is the
         // real overlap between here and Tokyo at the moment of capture.
         Shot(name: "world-clock",
              instance: widget(.world, ["zone": .string("Asia/Tokyo"),
                                        "city": .string("Tokyo")]),
-             isPreview: false),
+             isPreview: false, source: .live),
 
-        // Sample data. A real read would list this machine's own accessories,
-        // which is both less illustrative and more personal than it looks.
-        Shot(name: "battery", instance: widget(.battery), isPreview: true),
+        // Live: the calendar and nothing else, so the three bars are exactly
+        // how far through the day, month and year the capture happened.
+        Shot(name: "time-progress", instance: widget(.progress),
+             isPreview: false, source: .live),
+
+        // Live. No drink has been logged, so the panel says so rather than
+        // dressing its cycle anchor up as one - which is the state a widget
+        // added a minute ago is genuinely in.
+        Shot(name: "hydration", instance: widget(.hydration),
+             isPreview: false, source: .live),
+
+        // The catalog's own default alarm, with the countdown to it computed
+        // against the real clock.
+        Shot(name: "alarm", instance: widget(.alarm), isPreview: false, source: .live),
+
+        // Live quotes, fetched here because the panel deliberately does not
+        // fetch: it renders whatever the tile's service has already cached,
+        // and in this tool there is no tile. One prepare covers the watchlist
+        // below as well, since the two share the service's cache.
+        Shot(name: "stock",
+             instance: widget(.stock), isPreview: false, source: .live,
+             prepare: {
+                 StockService.shared.track(["AAPL", "MSFT", "NVDA"])
+                 await StockService.shared.refresh()
+             }),
+
+        Shot(name: "watchlist", instance: widget(.watchlist),
+             isPreview: false, source: .live),
+
+        // The one empty state worth a picture. This build ships no Stripe,
+        // Paddle or Shopify client, and the panel's whole design is about
+        // refusing to draw a plausible amount under a real account name - so
+        // this is the app being honest, not the app failing. The account is
+        // left unnamed so even the label is something the code produced.
+        Shot(name: "stripe", instance: widget(.stripe), isPreview: false, source: .empty),
+
+        // Live: `sharingd`'s own discoverability setting, read straight from
+        // its preferences. Whatever this Mac is actually set to is what the
+        // image will show.
+        Shot(name: "airdrop", instance: widget(.airdrop), isPreview: false, source: .live),
+
+        // The note's own words, which are the widget's content rather than a
+        // reading of anything.
+        Shot(name: "sticky-note",
+             instance: widget(.notes, ["text": .string("Renew the domain")]),
+             isPreview: false, source: .live),
+
+        // Sample data. A live read would list this machine's own accessories,
+        // which is both less illustrative and more personal than it looks -
+        // and a Mac with no battery would leave the panel with nothing to say
+        // at all.
+        Shot(name: "battery", instance: widget(.battery), isPreview: true, source: .sample),
+
+        // Sample data - the same deterministic traffic the library draws. The
+        // sampler works and the panel would happily show it, but an unattended
+        // capture run is an idle machine, and the whole point of the panel is
+        // the shape of a minute rather than the flat line an idle one has.
+        Shot(name: "network", instance: widget(.network), isPreview: true, source: .sample),
 
         // Live, and genuinely running: `prepare` does exactly what pressing
         // Start does.
         Shot(name: "focus-timer", instance: widget(.timer), isPreview: false,
-             prepare: startFocusSession),
+             source: .live, prepare: startFocusSession),
 
-        // Sample data - the same deterministic traffic the library draws.
-        Shot(name: "network", instance: widget(.network), isPreview: true),
+        // Live. The deadline is a real one, set when this run began, so the
+        // figure counting down is the time actually left on it.
+        Shot(name: "countdown",
+             instance: widget(.countdown,
+                              ["duration": .number(600),
+                               "deadline": .number(started.timeIntervalSince1970 + 600)]),
+             isPreview: false, source: .live),
 
-        // The music panel has no sample data at all, by design: it shows what
-        // a player is actually doing or says plainly that it has nothing to
-        // read. Reading a player needs Apple Events, which needs automation
-        // consent this tool has not been granted, so what this captures is the
-        // empty state. Honest, and labelled as such in the report.
-        Shot(name: "music", instance: widget(.music), isPreview: true),
+        // Live, and really has been running that long: `started` is the moment
+        // this tool launched, which is the same key the tile writes when the
+        // watch is started.
+        Shot(name: "stopwatch",
+             instance: widget(.stopwatch,
+                              ["started": .number(started.timeIntervalSince1970)]),
+             isPreview: false, source: .live),
 
-        // Live, and deliberately last: the graph is drawn from
+        // Live, and deliberately last of the panels: the graph is drawn from
         // `SystemMetrics`' rolling buffer, which has no `isPreview` stand-in -
         // the only way to show it is to let the sampler fill, which it has
         // been doing since launch while the other panels were captured.
@@ -105,15 +194,19 @@ private func shots() -> [Shot] {
              instance: widget(.system, ["metrics": .list([.string("cpu"),
                                                           .string("memory"),
                                                           .string("disk")])]),
-             isPreview: false,
+             isPreview: false, source: .live,
              prepare: { await waitForHistory(samples: SystemMetrics.historyLength,
                                              limit: .seconds(75)) }),
     ]
 }
 
+/// The catalog's defaults under the overrides, so every shot is the widget as
+/// the library adds it rather than one carrying only the keys typed here.
+/// The three revenue kinds have no catalog entry, which is the fallback.
 private func widget(_ kind: WidgetKind,
                     _ values: [String: WidgetConfig.Value] = [:]) -> WidgetInstance {
-    WidgetInstance(kind: kind, config: WidgetConfig(values))
+    WidgetCatalog.make(kind, overrides: values)
+        ?? WidgetInstance(kind: kind, config: WidgetConfig(values))
 }
 
 /// Starts a focus session the way the panel's own Start button does.
@@ -130,22 +223,56 @@ private func startFocusSession() async {
     TimerStateProvider.shared.state = state
 }
 
+// MARK: - Panels the tool does not take
+//
+// Calendar and Reminders both read EventKit, and authorisation is granted per
+// binary: this tool has none, cannot ask for one without the usage strings a
+// bundled app carries, and would be answered by a person at the machine rather
+// than by a capture run. Their panels would render the permission line and
+// nothing else. Now Playing is the same shape of problem - reading a player
+// needs Automation consent this binary has not been granted - and Paddle and
+// Shopify are the Stripe panel with a different word in it. One honest empty
+// state is worth showing; four is a gallery of apologies.
+
 // MARK: - Windows
 
-/// A plain neutral field behind the panels.
+/// A neutral field behind everything.
 ///
-/// Two jobs, both honest: the vibrancy has something real to sample, so the
-/// material reads as itself rather than as a flat fill; and whatever else is
-/// on the capture machine's screen stays out of the images. It is deliberately
-/// nobody's artwork and nobody else's app.
+/// Three jobs, all honest. The material is translucent and samples what is
+/// genuinely behind it, so it needs something with shape to refract or it
+/// reads as a flat fill and the whole point of the surface is lost. Whatever
+/// else is on the capture machine's screen stays out of the images. And it is
+/// deliberately nobody's artwork and nobody else's app: two very soft washes
+/// over the system's own window colours, which follow the appearance the Mac
+/// is set to, so the panels' text and their backdrop can never end up the same
+/// shade of anything.
+private struct Backdrop: View {
+    var body: some View {
+        LinearGradient(colors: [Color(nsColor: .underPageBackgroundColor),
+                                Color(nsColor: .windowBackgroundColor)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+            // Placed either side of the middle, which is where every capture
+            // lands, so the glass has a gradient running under it rather than
+            // one flat colour. Low enough that nothing downstream reads as
+            // tinted.
+            .overlay {
+                RadialGradient(colors: [Color(hex: "#5B7CFA").opacity(0.15), .clear],
+                               center: UnitPoint(x: 0.34, y: 0.38),
+                               startRadius: 0, endRadius: 760)
+            }
+            .overlay {
+                RadialGradient(colors: [Color(hex: "#E8916A").opacity(0.10), .clear],
+                               center: UnitPoint(x: 0.74, y: 0.64),
+                               startRadius: 0, endRadius: 700)
+            }
+    }
+}
+
 @MainActor
 private func makeBackdrop(on screen: NSScreen) -> NSWindow {
     let window = NSWindow(contentRect: screen.frame, styleMask: .borderless,
                           backing: .buffered, defer: false)
-    window.contentView = NSHostingView(
-        rootView: LinearGradient(colors: [Color(nsColor: .windowBackgroundColor),
-                                          Color(nsColor: .underPageBackgroundColor)],
-                                 startPoint: .top, endPoint: .bottom))
+    window.contentView = NSHostingView(rootView: Backdrop())
     window.isOpaque = true
     window.isReleasedWhenClosed = false
     window.ignoresMouseEvents = true
@@ -158,6 +285,45 @@ private func makeBackdrop(on screen: NSScreen) -> NSWindow {
     return window
 }
 
+/// A borderless, click-through window one step above the backdrop, which is
+/// what both the panels and the shelf are photographed in.
+///
+/// - Parameter shadow: whether the *window* casts one. A panel needs it, since
+///   its surface draws none of its own; the shelf's plate already draws one
+///   inside its bounds and would get two.
+@MainActor
+private func makeWindow<Content: View>(_ content: Content, shadow: Bool,
+                                       on screen: NSScreen) -> (NSWindow, NSHostingView<Content>)? {
+    let hosting = NSHostingView(rootView: content)
+    hosting.sizingOptions = [.intrinsicContentSize]
+    let size = hosting.fittingSize
+    guard size.width > 1, size.height > 1 else { return nil }
+
+    let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
+                          styleMask: .borderless, backing: .buffered, defer: false)
+    window.contentView = hosting
+    window.isOpaque = false
+    window.backgroundColor = .clear
+    window.hasShadow = shadow
+    window.isReleasedWhenClosed = false
+    window.ignoresMouseEvents = true
+    window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    window.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+    centre(window, size: size, on: screen)
+    window.orderFrontRegardless()
+    return (window, hosting)
+}
+
+/// Middle of the screen, well clear of every edge, so the shadow and the
+/// padding around it always have room.
+@MainActor
+private func centre(_ window: NSWindow, size: CGSize, on screen: NSScreen) {
+    window.setFrame(CGRect(x: (screen.frame.midX - size.width / 2).rounded(),
+                           y: (screen.frame.midY - size.height / 2).rounded(),
+                           width: size.width, height: size.height),
+                    display: true)
+}
+
 @MainActor
 private func makePanel(_ shot: Shot, on screen: NSScreen) -> NSWindow? {
     let chrome = WidgetDetailChrome(
@@ -168,32 +334,100 @@ private func makePanel(_ shot: Shot, on screen: NSScreen) -> NSWindow? {
         edge: .bottom,
         session: UUID())
 
-    let hosting = NSHostingView(rootView: chrome)
-    hosting.sizingOptions = [.intrinsicContentSize]
-    let size = hosting.fittingSize
-    guard size.width > 1, size.height > 1 else {
+    guard let (window, _) = makeWindow(chrome, shadow: true, on: screen) else {
         log("\(shot.name): the panel measured empty, skipping")
         return nil
     }
-
-    // Middle of the screen, well clear of every edge, so the shadow and the
-    // padding below always have room.
-    let frame = CGRect(x: (screen.frame.midX - size.width / 2).rounded(),
-                       y: (screen.frame.midY - size.height / 2).rounded(),
-                       width: size.width, height: size.height)
-    let window = NSWindow(contentRect: frame, styleMask: .borderless,
-                          backing: .buffered, defer: false)
-    window.contentView = hosting
-    window.isOpaque = false
-    window.backgroundColor = .clear
-    window.hasShadow = true
-    window.isReleasedWhenClosed = false
-    window.ignoresMouseEvents = true
-    window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-    window.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
-    window.setFrame(frame, display: true)
-    window.orderFrontRegardless()
     return window
+}
+
+// MARK: - The shelf
+//
+// The product itself, and the one thing this tool could not previously render:
+// `DockShelfView` needs an `AppState`, and an `AppState` used to mean the
+// user's own saved setup. `AppState(store:)` and `Store(directory:)` between
+// them make a second, disposable one, so the shelf below is built in a
+// temporary directory and nothing of theirs is read or written.
+
+/// 0.5 is the one size where `Geometry.contentScale` is exactly 1: every
+/// widget draws at the size it was authored at, with nothing scaled up or
+/// down. It is a setting like any other, and the shelf ships smaller.
+private let shelfScale: Double = 0.5
+
+/// A shelf built for a picture: apps every Mac has, widgets that read live and
+/// look different from one another, in an order that runs left to right.
+///
+/// Three settings are deliberately not the defaults, because the defaults
+/// would photograph whoever is running this rather than the app: following the
+/// system Dock would fill the shelf with their pinned apps, and running apps
+/// would add whatever they happen to have open.
+@MainActor
+private func makeShelfState() -> AppState? {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appending(path: "docket-shots-\(UUID().uuidString)", directoryHint: .isDirectory)
+    guard (try? FileManager.default.createDirectory(at: directory,
+                                                    withIntermediateDirectories: true)) != nil
+    else {
+        log("could not make a temporary directory for the shelf; skipping it")
+        return nil
+    }
+
+    var profile = DockProfile(kind: .customDock, name: "Showcase", scale: shelfScale)
+    for bundleID in ["com.apple.finder", "com.apple.Safari", "com.apple.mail",
+                     "com.apple.Terminal", "com.apple.systempreferences"] {
+        // Skipped rather than drawn dead: an app that is genuinely not
+        // installed has no icon to show, and the shelf would render it as a
+        // repairable gap, which is not what this image is about.
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+        else {
+            log("shelf: \(bundleID) is not installed here, leaving it out")
+            continue
+        }
+        profile.items.append(.app(id: UUID(), bundleID: bundleID, ref: .capture(url)))
+    }
+    profile.items.append(.spacer(id: UUID(), size: .small))
+    for instance in [widget(.clock),
+                     widget(.world, ["zone": .string("Asia/Tokyo"),
+                                     "city": .string("Tokyo")]),
+                     widget(.system, ["metrics": .list([.string("cpu"),
+                                                        .string("memory")])]),
+                     widget(.notes, ["text": .string("Renew the domain")])] {
+        profile.items.append(.widget(instance))
+    }
+
+    let shelf = AppState(store: Store(directory: directory))
+    shelf.state.profiles = [profile]
+    shelf.state.customDock.profileID = profile.id
+    shelf.state.customDock.scale = shelfScale
+    shelf.state.customDock.position = .bottom
+    shelf.state.customDock.followSystemDock = false
+    shelf.state.customDock.showRunningApps = false
+    return shelf
+}
+
+/// The plate inside the shelf's window.
+///
+/// The window is larger than what it draws: `DockShelfView` keeps a margin at
+/// each end of the row for a magnified icon to grow along it, and headroom
+/// above the plate for a launch bounce to rise into. Neither is ever drawn at
+/// rest, so photographing the whole window gives a shelf sitting in a band of
+/// empty backdrop, off centre.
+///
+/// The two figures are recomputed here from the geometry the view derives them
+/// from. If the view's reserve ever changes and this does not, the symptom is
+/// uneven air around the shelf rather than a wrong picture of it.
+@MainActor
+private func plateRect(of window: NSWindow, shelf: AppState) -> CGRect {
+    let icon = Geometry.iconGeometry(scale: shelf.effectiveScale,
+                                     vertical: shelf.effectivePosition.isVertical,
+                                     hasWidgets: shelf.hasWidgets).icon
+    let magnifies = shelf.magnificationEnabled
+    let along = magnifies ? shelf.magnificationRadius * shelf.magnificationPeak * 2 : 0
+    let across = max(magnifies ? icon * shelf.magnificationPeak : 0, icon * Bounce.peak) + 12
+    return CGRect(x: window.frame.minX + along / 2,
+                  y: window.frame.minY,
+                  width: window.frame.width - along,
+                  height: window.frame.height - across)
 }
 
 // MARK: - Run
@@ -202,7 +436,7 @@ private func makePanel(_ shot: Shot, on screen: NSScreen) -> NSWindow? {
 /// window server to have composited the material at least once.
 private let settle = Duration.milliseconds(800)
 
-/// Room around the panel for its shadow, which is part of how it looks and is
+/// Room around a surface for its shadow, which is part of how it looks and is
 /// cropped off by the window frame alone. Only ever fills with backdrop.
 private let shadowPadding: CGFloat = 26
 
@@ -221,6 +455,25 @@ private func waitForHistory(samples wanted: Int, limit: Duration) async {
     }
 }
 
+/// Hands one region to the script and waits for it to come back.
+/// - Returns: false once the script has closed the pipe, which ends the run.
+@MainActor
+private func capture(_ name: String, _ rect: CGRect, _ source: Source,
+                     on screen: NSScreen) -> Bool {
+    let region = rect.insetBy(dx: -shadowPadding, dy: -shadowPadding)
+        .intersection(screen.frame)
+    let flipped = topLeftRect(region)
+    emit("\(name) \(Int(flipped.minX)) \(Int(flipped.minY)) \(Int(flipped.width)) \(Int(flipped.height)) \(source.rawValue)")
+    // Blocks the main thread until the script says the capture is done. Safe
+    // to block: the window is already on screen and the window server
+    // composites it without this process doing anything at all.
+    guard readLine() != nil else {
+        log("the capture script closed the pipe; stopping")
+        return false
+    }
+    return true
+}
+
 @MainActor
 private func run() async {
     // `.main` is the screen with keyboard focus, which a tool that never
@@ -230,40 +483,56 @@ private func run() async {
         exit(1)
     }
 
+    let started = Date()
     // Started first thing so the buffer is filling all through the run, and
-    // the system panel - captured last - has a full minute to draw.
+    // the system panel - captured last of the panels - has a full minute to
+    // draw.
     SystemMetrics.shared.start()
 
     let backdrop = makeBackdrop(on: screen)
     // The backdrop is what the material samples, so give it a moment to be on
-    // screen before the first panel is placed over it.
+    // screen before the first surface is placed over it.
     try? await Task.sleep(for: settle)
 
-    for shot in shots() {
+    for shot in shots(since: started) {
         await shot.prepare()
         guard let window = makePanel(shot, on: screen) else { continue }
         try? await Task.sleep(for: settle)
-
-        let region = window.frame
-            .insetBy(dx: -shadowPadding, dy: -shadowPadding)
-            .intersection(screen.frame)
-        let rect = topLeftRect(region)
-        emit("\(shot.name) \(Int(rect.minX)) \(Int(rect.minY)) \(Int(rect.width)) \(Int(rect.height))")
-
-        // Blocks the main thread until the script says the capture is done.
-        // Safe to block: the window is already on screen and the window server
-        // composites it without this process doing anything at all.
-        guard readLine() != nil else {
-            log("the capture script closed the pipe; stopping")
-            window.orderOut(nil)
-            break
-        }
+        let carryOn = capture(shot.name, window.frame, shot.source, on: screen)
         window.orderOut(nil)
+        guard carryOn else {
+            backdrop.orderOut(nil)
+            exit(0)
+        }
     }
+
+    // Last, so every service the shelf's tiles read - the metrics sampler
+    // above all - has been running for the whole session by the time it draws.
+    await captureShelf(on: screen)
 
     backdrop.orderOut(nil)
     log("done")
     exit(0)
+}
+
+@MainActor
+private func captureShelf(on screen: NSScreen) async {
+    guard let shelf = makeShelfState() else { return }
+    guard let (window, hosting) = makeWindow(DockShelfView().environment(shelf),
+                                             shadow: false, on: screen) else {
+        log("shelf: measured empty, skipping")
+        return
+    }
+
+    // Measured twice. The shelf sizes itself against the screen it believes it
+    // is on, and it only learns that on its first appearance - so the size it
+    // wanted before it was ever shown is not the size it settles at.
+    try? await Task.sleep(for: settle)
+    centre(window, size: hosting.fittingSize, on: screen)
+    try? await Task.sleep(for: settle)
+
+    _ = capture("shelf-showcase", plateRect(of: window, shelf: shelf), .live, on: screen)
+    window.orderOut(nil)
 }
 
 let app = NSApplication.shared
