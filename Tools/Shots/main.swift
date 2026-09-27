@@ -442,6 +442,52 @@ private let settle = Duration.milliseconds(800)
 /// cropped off by the window frame alone. Only ever fills with backdrop.
 private let shadowPadding: CGFloat = 26
 
+/// The shape every panel image is captured in.
+///
+/// Panels are their own natural size: widths follow `WidgetDetail.width` per
+/// kind and heights follow the content, which produced images from 664x334 to
+/// 784x780. A grid of those reads as ragged rather than as a set, because a
+/// row of images with different aspect ratios cannot line up.
+///
+/// What fixes that is a common *ratio*, not a common pixel size. One fixed
+/// canvas big enough for the tallest panel leaves the short ones as small
+/// islands in a field of backdrop, which looks worse than the raggedness it
+/// was meant to fix. So each panel gets the smallest 4:3 box that holds it
+/// with a margin, and every image then scales to the same shape in a grid
+/// while the panel still fills most of its own frame.
+private let panelAspect: CGFloat = 4.0 / 3.0
+
+/// A quarter of the panel's longer side, so the surface has room to sit in
+/// rather than being trimmed to its own edge.
+private let panelMargin: CGFloat = 0.25
+
+private func panelCanvas(for rect: CGRect) -> CGSize {
+    let margin = max(rect.width, rect.height) * panelMargin
+    let wanted = CGSize(width: rect.width + margin, height: rect.height + margin)
+    // Grow whichever side is short of the ratio; never shrink, or the panel
+    // would be cropped by its own frame.
+    return wanted.width / wanted.height < panelAspect
+        ? CGSize(width: wanted.height * panelAspect, height: wanted.height)
+        : CGSize(width: wanted.width, height: wanted.width / panelAspect)
+}
+
+private extension CGRect {
+    /// Slides the rect back inside `bounds` rather than trimming it.
+    ///
+    /// Panels open just above the Dock, so a canvas centred on one runs off
+    /// the bottom of the screen. Cropping there would hand back a shorter
+    /// image than every other panel, which is the raggedness the canvas
+    /// exists to remove; sliding keeps the shape and only moves where the
+    /// panel sits within it. Only a canvas larger than the screen is
+    /// trimmed, and none of them are.
+    func nudgedInside(_ bounds: CGRect) -> CGRect {
+        var r = self
+        r.origin.x = min(max(r.minX, bounds.minX), max(bounds.minX, bounds.maxX - r.width))
+        r.origin.y = min(max(r.minY, bounds.minY), max(bounds.minY, bounds.maxY - r.height))
+        return r.intersection(bounds)
+    }
+}
+
 /// Waits for the metrics buffer to fill, so the history graph covers the full
 /// minute it names rather than the handful of seconds it happened to have.
 @MainActor
@@ -461,9 +507,20 @@ private func waitForHistory(samples wanted: Int, limit: Duration) async {
 /// - Returns: false once the script has closed the pipe, which ends the run.
 @MainActor
 private func capture(_ name: String, _ rect: CGRect, _ source: Source,
-                     on screen: NSScreen) -> Bool {
-    let region = rect.insetBy(dx: -shadowPadding, dy: -shadowPadding)
-        .intersection(screen.frame)
+                     on screen: NSScreen, uniform: Bool = true) -> Bool {
+    let region: CGRect
+    if uniform {
+        // Centred on the surface rather than fitted to it, so every panel
+        // arrives at the same shape and a grid of them lines up.
+        let canvas = panelCanvas(for: rect)
+        region = CGRect(x: rect.midX - canvas.width / 2,
+                        y: rect.midY - canvas.height / 2,
+                        width: canvas.width, height: canvas.height)
+            .nudgedInside(screen.frame)
+    } else {
+        region = rect.insetBy(dx: -shadowPadding, dy: -shadowPadding)
+            .intersection(screen.frame)
+    }
     let flipped = topLeftRect(region)
     emit("\(name) \(Int(flipped.minX)) \(Int(flipped.minY)) \(Int(flipped.width)) \(Int(flipped.height)) \(source.rawValue)")
     // Blocks the main thread until the script says the capture is done. Safe
@@ -533,7 +590,10 @@ private func captureShelf(on screen: NSScreen) async {
     centre(window, size: hosting.fittingSize, on: screen)
     try? await Task.sleep(for: settle)
 
-    _ = capture("shelf-showcase", plateRect(of: window, shelf: shelf), .live, on: screen)
+    // No canvas: the shelf is a long strip, and squaring it off would be
+    // mostly empty space either side of it.
+    _ = capture("shelf-showcase", plateRect(of: window, shelf: shelf), .live,
+                on: screen, uniform: false)
     window.orderOut(nil)
 }
 
