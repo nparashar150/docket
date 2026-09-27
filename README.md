@@ -11,7 +11,7 @@ or stands in for it.
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](project.yml)
 [![Release](https://img.shields.io/github/v/release/nparashar150/docket?label=release&color=blue)](https://github.com/nparashar150/docket/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/nparashar150/docket/ci.yml?branch=main&label=build)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-321-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-326-brightgreen)](#tests)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
 <br>
@@ -251,7 +251,7 @@ to. [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
 
 ## Tests
 
-**321 tests, and almost all of them exist because something broke.**
+**326 tests, and almost all of them exist because something broke.**
 
 ```sh
 xcodegen generate
