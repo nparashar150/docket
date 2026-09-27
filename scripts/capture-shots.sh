@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 #
-# Photographs the app's real detail panels for the README.
+# Photographs the app's real detail panels, and the shelf itself, for the
+# README.
 #
-# Builds the Shots target, which puts each panel in a real window on a real
+# Builds the Shots target, which puts each view in a real window on a real
 # display and prints where it landed; this script then screenshots that region.
-# The round trip exists because the panels' surface is a behind-window
-# NSVisualEffectView: it has nothing to sample unless the window is genuinely
-# on screen, so an offscreen render is not the same picture.
+# The round trip exists because these surfaces are behind-window materials -
+# an NSVisualEffectView for a panel, macOS 26 glass for the shelf - and neither
+# has anything to sample unless the window is genuinely on screen, so an
+# offscreen render is not the same picture.
+#
+# Every capture is reported with what it actually shows: `live` for readings
+# taken from this machine, this network or this clock, `sample` for a widget's
+# own preview values, and `empty` for a panel's honest "nothing is connected"
+# state. Anything that is not `live` has to be labelled wherever the image is
+# used.
 #
 # Must be run on a Mac, sitting at a real display that is awake and unlocked.
 # Screen Recording permission belongs to whatever runs this - Terminal, iTerm,
@@ -14,11 +22,11 @@
 # images until that app is ticked in System Settings > Privacy & Security >
 # Screen & System Audio Recording, and restarted.
 #
-# The run takes a couple of minutes: one panel draws a live graph from a
-# rolling one-second sampler, and the script waits for that minute rather than
-# shipping a graph with four points in it. The panels sit above everything else
-# on the display while they are captured, so leave the machine alone until it
-# prints its summary.
+# The run takes a few minutes: two panels wait on a network fetch, and one
+# draws a live graph from a rolling one-second sampler, which is waited out
+# rather than shipping a graph with four points in it. Everything sits above
+# the rest of the display while it is captured, so leave the machine alone
+# until it prints its summary.
 
 set -euo pipefail
 
@@ -76,15 +84,19 @@ exec 4<"$FRAMES"
 WRITTEN=()
 FAILED=()
 
-while read -r name x y w h <&4; do
+while read -r name x y w h source <&4; do
+  # A tool that predates the source column still gets its images captured;
+  # only the label is unknown.
+  source="${source:-unknown}"
   dest="$OUT_DIR/$name.png"
   rm -f "$dest"
   screencapture -x -R "$x,$y,$w,$h" "$dest" || true
   printf 'ok\n' >&3
 
   if [ -s "$dest" ]; then
-    WRITTEN+=("$name")
-    printf 'capture-shots: %-16s %sx%s pt\n' "$name" "$w" "$h"
+    # Name and provenance travel together; no shot name contains a colon.
+    WRITTEN+=("$name:$source")
+    printf 'capture-shots: %-16s %sx%s pt  %s\n' "$name" "$w" "$h" "$source"
   else
     FAILED+=("$name")
     printf 'capture-shots: %-16s NO IMAGE\n' "$name" >&2
@@ -96,16 +108,26 @@ SHOTS_PID=""
 
 echo
 echo "capture-shots: wrote ${#WRITTEN[@]} image(s) to docs/images/"
-for name in "${WRITTEN[@]:-}"; do
-  [ -n "$name" ] || continue
+NOT_LIVE=0
+for entry in "${WRITTEN[@]:-}"; do
+  [ -n "$entry" ] || continue
+  name="${entry%%:*}"
+  source="${entry#*:}"
+  [ "$source" = "live" ] || NOT_LIVE=$((NOT_LIVE + 1))
   # `|| true`: a file sips cannot read reports no size rather than taking the
   # whole summary down with it - the check that matters already ran above.
   pw=""; ph=""
   read -r pw ph < <(sips -g pixelWidth -g pixelHeight "$OUT_DIR/$name.png" 2>/dev/null \
                     | awk '$1=="pixelWidth:"{w=$2} $1=="pixelHeight:"{h=$2}
                            END{if (w ~ /^[0-9]+$/ && h ~ /^[0-9]+$/) print w, h}') || true
-  printf '  docs/images/%-22s %sx%s px\n' "$name.png" "${pw:-?}" "${ph:-?}"
+  printf '  docs/images/%-22s %8sx%-8s %s\n' "$name.png" "${pw:-?}" "${ph:-?}" "$source"
 done
+
+if [ "$NOT_LIVE" -gt 0 ]; then
+  echo
+  printf 'capture-shots: %s image(s) above are not live readings. Say so wherever\n' "$NOT_LIVE"
+  echo "               they are used: an unlabelled sample reads as a real one."
+fi
 
 if [ "${#FAILED[@]}" -gt 0 ] && [ -n "${FAILED[0]:-}" ]; then
   echo

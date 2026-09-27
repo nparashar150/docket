@@ -436,6 +436,18 @@ public struct DockProfile: Codable, Hashable, Identifiable, Sendable {
     public var items: [DockItem]
     /// Travels with a customDock profile; ignored for macOSDock profiles.
     public var scale: Double
+    /// Reserved, and read by nothing yet.
+    ///
+    /// Both are groundwork for switching profiles without the menu bar: a
+    /// global hotkey, and a Focus filter that changes the shelf when a Focus
+    /// turns on. They are carried through save, restore and duplicate so a
+    /// setup made today survives into the build that honours them, and
+    /// `duplicateProfile` deliberately drops the hotkey, since two profiles
+    /// must never claim one key combination.
+    ///
+    /// Kept rather than removed because the plan for them is written down and
+    /// the modelling is the cheap half. Anything else stored and unread has
+    /// been deleted rather than left to look like an oversight.
     public var shortcut: KeyCombo?
     public var focusFilterID: String?
 
@@ -689,8 +701,6 @@ public struct CustomDockSettings: Codable, Hashable, Sendable {
 public struct MacOSDockSettings: Codable, Hashable, Sendable {
     /// nil means "No profile" - leave the live Dock completely alone.
     public var profileID: UUID?
-    public var smoothSwitching: Bool = false
-    public var autoSaveLiveDockChanges: Bool = false
 
     /// Decodes field by field, so an unknown or missing key is a default and
     /// not a thrown error.
@@ -704,8 +714,6 @@ public struct MacOSDockSettings: Codable, Hashable, Sendable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
-        smoothSwitching = try c.decodeIfPresent(Bool.self, forKey: .smoothSwitching) ?? false
-        autoSaveLiveDockChanges = try c.decodeIfPresent(Bool.self, forKey: .autoSaveLiveDockChanges) ?? false
     }
 
     public init() {}
