@@ -55,10 +55,13 @@ public struct WidgetTile: View {
         case .watchlist: WatchlistTile(instance: instance, context: context)
         case .weather: WeatherTile(instance: instance, context: context)
         case .music: MusicTile(instance: instance, context: context)
-        // Still to come; a labelled placeholder beats rendering nothing.
         case .calendar: CalendarTile(instance: instance, context: context)
         case .reminders: RemindersTile(instance: instance, context: context)
-        // Still to come; a labelled placeholder beats rendering nothing.
+        // Still to come; a labelled placeholder beats rendering nothing. None
+        // of these five can be placed today, so nothing reaches this arm: the
+        // library filters on selfContained, which excludes .shortcut, and the
+        // other four have no WidgetCatalog entry at all, so make returns nil.
+        // It stays as the honest fallback for when they can be.
         case .aiUsage, .shortcut, .stripe, .paddle, .shopify:
             UnavailableTile(kind: instance.kind)
         }
