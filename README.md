@@ -321,9 +321,11 @@ tests as two separate steps.
 
 ## Known limits
 
-- **Five widget kinds are placeholders.** AI usage, Shortcut, Stripe, Paddle and
-  Shopify render a labelled "not yet" tile instead of a real one. Stripe, Paddle
-  and Shopify do have working detail panels; the other two do not.
+- **Five widget kinds cannot be added.** AI usage, Shortcut, Stripe, Paddle and
+  Shopify are declared kinds the library does not offer, so none of them can be
+  put on a shelf in this build. Stripe, Paddle and Shopify do have working
+  detail panels behind them; the other two do not. All five fall back to a
+  labelled "not yet" tile, which nothing currently reaches.
 - **The revenue widgets have no service behind them.** Stripe, Paddle and Shopify
   are all network-backed and this build ships no client for any of them. Their
   panel deliberately states that it is unconnected rather than drawing a
