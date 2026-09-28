@@ -24,6 +24,17 @@ struct MusicTile: View {
 
     private var browsersEnabled: Bool { config.bool("browsers", default: true) }
 
+    /// The icon of whichever app is playing, for the tile to show when there
+    /// is no album art.
+    ///
+    /// `AppCatalog` caches these; `NSWorkspace.icon(forFile:)` hits the disk
+    /// and this is asked on every layout pass. Nil when the app is not
+    /// installed, which leaves the generic note rather than a blank square.
+    private func sourceIcon(_ track: Playing?) -> NSImage? {
+        guard let track, !context.isPreview else { return nil }
+        return AppCatalog.shared.icon(forBundleID: track.sourceBundleID)
+    }
+
     /// How often a playing track is re-read. The scrubber glides over exactly
     /// this long, so it arrives just as the next reading does.
     static let pollInterval: TimeInterval = 0.85
@@ -92,7 +103,7 @@ struct MusicTile: View {
             //
             // Nothing playing means nothing to toggle, so the glyph is
             // absent rather than dead, and the whole chip opens the panel.
-            Artwork(image: playing?.artwork,
+            Artwork(image: playing?.artwork, fallback: sourceIcon(playing),
                     side: context.position.isVertical ? 52 : 44, corner: 10)
                 .overlay(alignment: .bottomTrailing) {
                     if let playing, !context.isPreview {
@@ -125,7 +136,7 @@ struct MusicTile: View {
 
     private func strip(_ track: Playing) -> some View {
         HStack(spacing: 11) {
-            Artwork(image: track.artwork, side: 38, corner: 8,
+            Artwork(image: track.artwork, fallback: sourceIcon(track), side: 38, corner: 8,
                     isPlaying: track.isPlaying) { toggle(track) }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -202,7 +213,7 @@ struct MusicTile: View {
     /// bar, so the column spends its height on the track instead.
     private func column(_ track: Playing) -> some View {
         VStack(spacing: 3) {
-            Artwork(image: track.artwork, side: 32, corner: 7)
+            Artwork(image: track.artwork, fallback: sourceIcon(track), side: 32, corner: 7)
             VStack(spacing: 0) {
                 title(track, size: 10)
                 artist(track, size: 9)
@@ -364,6 +375,17 @@ struct Playing {
     var artwork: NSImage?
     var isBrowser: Bool
 
+    /// The app the sound is actually coming from, so the tile can show its
+    /// icon when there is no album art.
+    ///
+    /// Browser video never has artwork, which used to mean every YouTube or
+    /// Netflix tab drew the same generic note. The browser's own icon says
+    /// far more, and it is the honest answer besides: the browser is what is
+    /// playing. Read from the system at runtime rather than shipped, which
+    /// is also the only way to show Spotify's mark without redistributing
+    /// it.
+    var sourceBundleID: String
+
     /// Whether anything beyond play/pause is meaningful.
     ///
     /// A `<video>` element has nothing to skip to, so browser playback offers
@@ -380,6 +402,7 @@ struct Playing {
         progress = native.progress
         artwork = native.artwork
         isBrowser = false
+        sourceBundleID = native.source.bundleID
     }
 
     /// No artwork: browser video has none to fetch, and the tile's placeholder
@@ -393,6 +416,7 @@ struct Playing {
         progress = browser.progress
         artwork = nil
         isBrowser = true
+        sourceBundleID = browser.browser.bundleID
     }
 }
 
@@ -400,6 +424,9 @@ struct Playing {
 /// never show an empty hole while artwork is still downloading.
 private struct Artwork: View {
     var image: NSImage?
+    /// Drawn instead of the note when there is no album art: the icon of
+    /// whichever app is playing.
+    var fallback: NSImage?
     var side: CGFloat
     var corner: CGFloat
     /// When set, the artwork itself toggles playback.
@@ -432,10 +459,20 @@ private struct Artwork: View {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
+                } else if let fallback {
+                    // The playing app's own icon. Inset, because an app icon
+                    // already carries its own rounded shape and padding, and
+                    // filling the square with it made the tile look like a
+                    // launcher for that app rather than a reading from it.
+                    Image(nsImage: fallback)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .padding(side * 0.17)
                 } else if control == nil {
-                    // Only when nothing else occupies the square. With the
-                    // play control on top, the note showed through behind it
-                    // and read as two overlapping glyphs.
+                    // Nothing playing and nothing to name, so the generic
+                    // note. Only when nothing else occupies the square: with
+                    // the play control on top, the note showed through
+                    // behind it and read as two overlapping glyphs.
                     Image(systemName: "music.note")
                         .font(.system(size: side * 0.48, weight: .medium))
                         .foregroundStyle(WidgetStyle.primary)
