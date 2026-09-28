@@ -133,7 +133,9 @@ final class SettingsWindow: HostedWindow {
             // form: it grows by one section per widget on the shelf. At the
             // old fixed 520x460 a shelf with four widgets showed two of them
             // and scrolled the rest inside a box nobody could enlarge.
-            size: NSSize(width: 560, height: 640),
+            // Wide enough for a sidebar and a form beside it without the
+            // form's controls crowding their labels.
+            size: NSSize(width: 800, height: 640),
             resizable: true
         )
     }

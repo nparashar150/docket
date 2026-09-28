@@ -1342,20 +1342,8 @@ struct DockShelfView: View {
         app.replaceItem(group.id, with: .group(updated))
     }
 
-    private func label(for item: DockItem) -> String {
-        switch item {
-        case .app(_, let bundleID, let ref):
-            ref.resolve()?.deletingPathExtension().lastPathComponent
-                ?? AppCatalog.shared.running.first { $0.id == bundleID }?.name
-                ?? bundleID
-        case .folder(_, let ref, _), .file(_, let ref):
-            ref.resolve()?.lastPathComponent ?? "Missing item"
-        case .link(_, _, let title): title
-        case .group(let g): g.name
-        case .spacer(_, let size): size == .small ? "Small spacer" : "Spacer"
-        case .widget(let widget): WidgetCatalog.entry(widget.kind)?.name ?? widget.kind.rawValue
-        }
-    }
+    /// Settings lists the same items, so the naming lives on DockItem now.
+    private func label(for item: DockItem) -> String { item.displayName }
 }
 
 /// The drawn part of a tile, isolated so SwiftUI can skip it.

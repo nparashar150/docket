@@ -81,17 +81,73 @@ struct SettingsView: View {
     }
 
 
+    /// The sections, in the order the sidebar lists them.
+    ///
+    /// Tinted glyphs rather than plain ones, which is what System Settings
+    /// does and what makes a sidebar scannable: the colour is the thing you
+    /// actually navigate by once you know where a section lives.
+    private static let sections: [(id: String, title: String, symbol: String, tint: Color)] = [
+        ("General", "General", "gearshape.fill", .gray),
+        ("Dock", "Dock", "dock.rectangle", .blue),
+        ("Widgets", "Widgets", "square.grid.2x2.fill", .purple),
+        ("About", "About", "info.circle.fill", .teal),
+    ]
+
     var body: some View {
-        TabView(selection: $selection.current) {
-            Tab("General", systemImage: "gearshape", value: "General") { general }
-            Tab("Dock", systemImage: "dock.rectangle", value: "Dock") { dock }
-            Tab("Widgets", systemImage: "square.grid.2x2", value: "Widgets") { widgets }
-            Tab("About", systemImage: "info.circle", value: "About") { about }
+        // A sidebar rather than a segmented strip along the top.
+        //
+        // Four tabs in a segmented control is the shape every SwiftUI
+        // settings window starts as, and it stops working the moment a
+        // section is longer than the window: the strip says nothing about
+        // where you are in a scroll, and it cannot grow. A sidebar is also
+        // simply what a Mac settings window looks like now.
+        NavigationSplitView {
+            List(selection: Binding(
+                get: { selection.current },
+                set: { selection.current = $0 ?? "General" })) {
+                ForEach(Array(Self.sections.enumerated()), id: \.element.id) { index, section in
+                    Label {
+                        Text(section.title)
+                    } icon: {
+                        // The glyph sits on its own tinted square, sized so
+                        // the four rows line up whatever each symbol's own
+                        // proportions are.
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(section.tint.gradient)
+                            .frame(width: 22, height: 22)
+                            .overlay {
+                                Image(systemName: section.symbol)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.white)
+                            }
+                    }
+                    .tag(section.id)
+                    .staggered(index, step: 0.05)
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 220)
+        } detail: {
+            pane
+                // Keyed on the section, so switching sections replays the
+                // stagger instead of swapping a finished pane for another
+                // finished pane.
+                .id(selection.current)
+                .navigationTitle(Self.sections.first { $0.id == selection.current }?.title ?? "Settings")
         }
-        // A minimum rather than a fixed size: the window is resizable now,
-        // and a hard frame here would win against it.
-        .frame(minWidth: 520, minHeight: 420)
+        // A minimum rather than a fixed size: the window is resizable, and a
+        // hard frame here would win against it.
+        .frame(minWidth: 700, minHeight: 460)
         .onAppear { selection.current = initialTab }
+    }
+
+    @ViewBuilder private var pane: some View {
+        switch selection.current {
+        case "Dock": dock
+        case "Widgets": widgets
+        case "About": about
+        default: general
+        }
     }
 
     // MARK: - General
@@ -369,6 +425,8 @@ struct SettingsView: View {
                     .disabled(state.customDock.followSystemDock)
                     .help("Grow icons under the pointer.")
             }
+
+            itemList
         }
         .formStyle(.grouped)
     }
@@ -388,6 +446,83 @@ struct SettingsView: View {
                          in range: ClosedRange<Int>) -> some View {
         Stepper(value: value, in: range) {
             LabeledContent(title) { Text("\(value.wrappedValue) min") }
+        }
+    }
+
+    /// What is actually on the shelf, in order.
+    ///
+    /// Everything about the shelf's contents used to be a toggle: whether to
+    /// show running apps, whether to mirror the Dock's. The list itself was
+    /// only visible on the shelf, and only editable by dragging on it, so
+    /// there was no way to see what was pinned without going and looking, and
+    /// no way to remove something you could not reach.
+    ///
+    /// Reordering stays on the shelf, where dragging is the obvious gesture
+    /// and already works. This is for seeing the list and taking things off
+    /// it.
+    @ViewBuilder private var itemList: some View {
+        let items = activeItems
+        Section {
+            if items.isEmpty {
+                Label("Nothing on the shelf yet.", systemImage: "tray")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    HStack(spacing: 9) {
+                        icon(for: item)
+                            .frame(width: 20, height: 20)
+                        Text(item.displayName)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(item.kindName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            remove(item.id)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Take this off the shelf")
+                    }
+                    .staggered(index)
+                }
+            }
+        } header: {
+            Text("On the shelf")
+        } footer: {
+            Text("Drag on the shelf itself to reorder, and add with the + at its end.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private func icon(for item: DockItem) -> some View {
+        if let image = item.listIcon {
+            Image(nsImage: image).resizable().interpolation(.high)
+        } else {
+            Image(systemName: item.listSymbol)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var activeProfileIndex: Int? {
+        guard let id = state.customDock.profileID else { return nil }
+        return state.profiles.firstIndex { $0.id == id }
+    }
+
+    private var activeItems: [DockItem] {
+        guard let index = activeProfileIndex else { return [] }
+        return state.profiles[index].items
+    }
+
+    private func remove(_ id: UUID) {
+        guard let index = activeProfileIndex else { return }
+        withAnimation(.smooth(duration: 0.22)) {
+            state.profiles[index].items.removeAll { $0.id == id }
         }
     }
 
