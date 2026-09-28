@@ -88,7 +88,9 @@ struct SettingsView: View {
             Tab("Widgets", systemImage: "square.grid.2x2", value: "Widgets") { widgets }
             Tab("About", systemImage: "info.circle", value: "About") { about }
         }
-        .frame(width: 520, height: 460)
+        // A minimum rather than a fixed size: the window is resizable now,
+        // and a hard frame here would win against it.
+        .frame(minWidth: 520, minHeight: 420)
         .onAppear { selection.current = initialTab }
     }
 
