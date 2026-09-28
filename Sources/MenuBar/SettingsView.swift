@@ -375,24 +375,56 @@ struct SettingsView: View {
 
     // MARK: - Widgets
 
+    /// Whether any widget on the active shelf is a Focus Timer.
+    private var hasFocusTimer: Bool {
+        guard let id = state.customDock.profileID,
+              let profile = state.profiles.first(where: { $0.id == id })
+        else { return false }
+        return profile.items.contains { $0.widget?.kind == .timer }
+    }
+
+    /// A minute count that shows the number it is set to.
+    private func minutes(_ title: String, _ value: Binding<Int>,
+                         in range: ClosedRange<Int>) -> some View {
+        Stepper(value: value, in: range) {
+            LabeledContent(title) { Text("\(value.wrappedValue) min") }
+        }
+    }
+
     private var widgets: some View {
         Form {
             WidgetSettingsSections(state: $state)
 
-            Section {
-                Stepper("Focus", value: $state.timer.work, in: 1...180)
-                Stepper("Break", value: $state.timer.rest, in: 1...60)
-                Stepper("Long break", value: $state.timer.longBreak, in: 1...180)
-                Stepper("Sessions before a long break", value: $state.timer.sessions, in: 1...12)
-                LabeledContent("Colour") { swatches }
-                Toggle("Alerts", isOn: $state.timer.alerts)
-                    .help("Notify when a focus session or break ends.")
-            } header: {
-                Text("Focus Timer")
-            } footer: {
-                Text("Every Focus Timer widget shares these settings - Docket treats them as one timer.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            // Only when there is one to configure. These are settings for a
+            // widget, and showing them to somebody whose shelf has no Focus
+            // Timer on it is the same noise as any other control that does
+            // nothing.
+            if hasFocusTimer {
+                Section {
+                    // Every one of these showed a label and a pair of arrows
+                    // and no number, so the only way to find out what the
+                    // focus length was set to was to click an arrow and
+                    // watch the tile change. A Stepper with a title draws
+                    // the title, never the value; the value has to be put
+                    // there. Same shape the per-widget number controls use.
+                    minutes("Focus", $state.timer.work, in: 1...180)
+                    minutes("Break", $state.timer.rest, in: 1...60)
+                    minutes("Long break", $state.timer.longBreak, in: 1...180)
+                    Stepper(value: $state.timer.sessions, in: 1...12) {
+                        LabeledContent("Sessions before a long break") {
+                            Text("\(state.timer.sessions)")
+                        }
+                    }
+                    LabeledContent("Colour") { swatches }
+                    Toggle("Alerts", isOn: $state.timer.alerts)
+                        .help("Notify when a focus session or break ends.")
+                } header: {
+                    Text("Focus Timer")
+                } footer: {
+                    Text("Every Focus Timer widget shares these settings - Docket treats them as one timer.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)

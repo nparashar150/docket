@@ -10,6 +10,10 @@ import SwiftUI
 struct WidgetSettingsSections: View {
     @Binding var state: PersistedState
 
+    /// Which widget is being edited. `nil` means "whichever is first", which
+    /// is also where a selection goes when its widget leaves the shelf.
+    @State private var selection: UUID?
+
     var body: some View {
         if instances.isEmpty {
             Section("Widgets") {
@@ -17,10 +21,32 @@ struct WidgetSettingsSections: View {
                       systemImage: "square.grid.2x2")
                     .foregroundStyle(.secondary)
             }
+        } else if configurable.isEmpty {
+            Section("Widgets") {
+                Label("The widgets on the Dock have no settings of their own.",
+                      systemImage: "square.grid.2x2")
+                    .foregroundStyle(.secondary)
+            }
         } else {
-            ForEach(configurable, id: \.instance.id) { pair in
+            // One widget at a time, chosen here.
+            //
+            // Every widget's sections used to be stacked into one scroll,
+            // which put four widgets and twenty-odd controls in a column and
+            // made finding the one you meant a hunt. The shelf is a row of
+            // separate things and its settings should be too.
+            Section("Widgets") {
+                Picker("Widget", selection: Binding(
+                    get: { chosen?.instance.id },
+                    set: { selection = $0 })) {
+                    ForEach(configurable, id: \.instance.id) { pair in
+                        Text(sectionTitle(for: pair)).tag(Optional(pair.instance.id))
+                    }
+                }
+            }
+
+            if let pair = chosen {
                 // Numbered only when there is more than one of a kind. Two
-                // Sticky Notes produced two sections both called "Sticky
+                // Sticky Notes produced two headings both called "Sticky
                 // Note", with nothing to say which note each one edited.
                 Section(sectionTitle(for: pair)) {
                     if !pair.entry.variants.isEmpty {
@@ -32,6 +58,19 @@ struct WidgetSettingsSections: View {
                 }
             }
         }
+    }
+
+    /// The selected widget, or the first one.
+    ///
+    /// Resolved rather than stored, so deleting the selected widget, or
+    /// switching to a profile that does not have it, falls back instead of
+    /// showing an empty pane with a picker that has nothing selected.
+    private var chosen: (instance: WidgetInstance, entry: WidgetCatalog.Entry)? {
+        let all = configurable
+        if let selection, let match = all.first(where: { $0.instance.id == selection }) {
+            return match
+        }
+        return all.first
     }
 
     // MARK: Model

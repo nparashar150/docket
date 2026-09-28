@@ -78,11 +78,29 @@ struct MusicTile: View {
     @ViewBuilder
     private var content: some View {
         if isMini {
-            // Artwork only, and deliberately inert: on the chip the artwork
-            // *is* the card, so a control there would swallow the click that
-            // opens the detail panel - where the transport lives in full.
+            // Artwork, with play and pause as a glyph on the corner.
+            //
+            // This was inert, on the reasoning that a control here would
+            // swallow the click that opens the panel. That is true of a
+            // control the size of the card, which is what handing the whole
+            // square to `Artwork`'s button mode would be: in mini the
+            // artwork *is* the chip. It is not true of `TileGlyph`, which is
+            // only ever as big as itself and leaves the rest of the chip to
+            // the shelf. Same division the focus timer and the stopwatch
+            // already use, and the reason the mini chip could previously do
+            // nothing at all without opening a panel first.
+            //
+            // Nothing playing means nothing to toggle, so the glyph is
+            // absent rather than dead, and the whole chip opens the panel.
             Artwork(image: playing?.artwork,
                     side: context.position.isVertical ? 52 : 44, corner: 10)
+                .overlay(alignment: .bottomTrailing) {
+                    if let playing, !context.isPreview {
+                        TileGlyph(symbol: playing.isPlaying ? "pause.fill" : "play.fill",
+                                  size: 9) { toggle(playing) }
+                            .accessibilityLabel(playing.isPlaying ? "Pause" : "Play")
+                    }
+                }
         } else if needsPermission, playing == nil {
             connect
         } else if let playing {

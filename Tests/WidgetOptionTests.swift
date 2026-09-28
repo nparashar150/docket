@@ -196,11 +196,53 @@ final class OptionApplicabilityTests: XCTestCase {
         XCTAssertTrue(WidgetCatalog.applies("chart", to: WidgetConfig(), kind: .network))
     }
 
+    private func music(mini: Bool) -> WidgetConfig {
+        var config = WidgetConfig()
+        config.set("mini", .bool(mini))
+        return config
+    }
+
+    /// Mini Now Playing is a 64pt chip: artwork and one glyph, which is play
+    /// and pause. The wide layout is the only one that draws skipping and
+    /// seeking, so in mini those five controls accepted a change and drew
+    /// nothing.
+    func testTheTransportOptionsApplyToTheWideLayoutOnly() {
+        for key in ["previous", "next", "backward", "forward", "skip"] {
+            XCTAssertTrue(WidgetCatalog.applies(key, to: music(mini: false), kind: .music),
+                          "\(key) is drawn by the wide layout")
+            XCTAssertFalse(WidgetCatalog.applies(key, to: music(mini: true), kind: .music),
+                           "\(key) draws nothing in mini, so it must not be offered")
+        }
+    }
+
+    /// Which players to watch still means something in mini: the chip shows
+    /// whichever source is playing, so narrowing the sources narrows what it
+    /// can show.
+    func testTheSourceOptionsApplyInMiniToo() {
+        for key in ["spotify", "apple", "browsers"] {
+            XCTAssertTrue(WidgetCatalog.applies(key, to: music(mini: true), kind: .music), key)
+        }
+    }
+
+    /// Every option that is conditional at all, so adding a rule means
+    /// coming here and saying so.
+    ///
+    /// The loop below uses a default config, which is the honest limit of
+    /// this test: a rule that only hides a control once some non-default
+    /// value is set would pass it. Both rules that exist today flip on a
+    /// value away from its default, which is why each is also pinned by a
+    /// test of its own above.
+    private static let conditional: Set<String> = [
+        "system.chart",
+        "music.previous", "music.next", "music.backward", "music.forward", "music.skip",
+    ]
+
     /// Everything else is unconditional, and a rule added carelessly would
     /// silently hide a working control.
     func testNothingElseIsHiddenByAccident() {
         for kind in WidgetKind.allCases {
-            for key in WidgetCatalog.configurableKeys(kind) where !(kind == .system && key == "chart") {
+            for key in WidgetCatalog.configurableKeys(kind)
+            where !Self.conditional.contains("\(kind.rawValue).\(key)") {
                 XCTAssertTrue(WidgetCatalog.applies(key, to: WidgetConfig(), kind: kind),
                               "\(kind.rawValue).\(key) should not be conditional")
             }
