@@ -33,11 +33,24 @@ struct MusicDetail: View {
 
     private var browsersEnabled: Bool { config.bool("browsers", default: true) }
 
-    private var playing: Playing? {
+    /// The ground the chrome paints, if the artwork gave one.
+    ///
+    /// Static because the chrome asks before this view exists, and it asks
+    /// through the same `playing` resolution so the colour can never belong
+    /// to a different track than the one on screen.
+    @MainActor
+    static func ground(instance: WidgetInstance, context: WidgetContext) -> ArtworkTint? {
+        MusicDetail(instance: instance, context: context).playing?.tint
+    }
+
+    fileprivate var playing: Playing? {
         guard !context.isPreview else { return nil }
         let native = MusicService.shared.nowPlaying.map(Playing.init(native:))
         let browser = browsersEnabled
-            ? BrowserMedia.shared.track.map { Playing(browser: $0, artwork: BrowserMedia.shared.artwork) }
+            ? BrowserMedia.shared.track.map {
+                Playing(browser: $0, artwork: BrowserMedia.shared.artwork,
+                        tint: BrowserMedia.shared.tint)
+            }
             : nil
         if native?.isPlaying == true { return native }
         if browser?.isPlaying == true { return browser }
@@ -68,27 +81,66 @@ struct MusicDetail: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Ink, pinned to the ground when there is one.
+    ///
+    /// `WidgetStyle.primary` and `.secondary` follow the system appearance,
+    /// which is right on a vibrant plate and wrong on a ground whose
+    /// brightness this app fixed: in a forced-light appearance they would go
+    /// dark and disappear into it. The same reasoning StickyNoteDetail
+    /// already uses for its ink on fixed paper.
+    private var hasGround: Bool { playing?.tint != nil }
+
+    private var ink: Color { hasGround ? .white : WidgetStyle.primary }
+
+    /// Opaque rather than `Color.secondary`, whose translucency caps its
+    /// contrast no matter what is behind it.
+    private var subInk: Color { hasGround ? Color(white: 0.8) : WidgetStyle.secondary }
+
+    private var trackInk: Color {
+        hasGround ? .white.opacity(0.48) : WidgetStyle.secondary.opacity(0.3)
+    }
+
     // MARK: Artwork
 
     /// Clipped twice on purpose: the fill is rounded before the image is laid
     /// over it, and `.fill` aspect ratio overflows the frame after it.
+    ///
+    /// Square only for square artwork. A cover is square and a video
+    /// thumbnail is 16:9, and cropping the second to the first threw away
+    /// 44% of its width from the middle outward, which is how a drag race
+    /// became a man standing in front of nothing. Wide artwork gets a wide
+    /// frame and is fitted into it instead.
     private func artwork(_ image: NSImage?) -> some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(WidgetStyle.primary.opacity(0.08))
+        let wide = (image?.size.width ?? 0) > (image?.size.height ?? 1) * 1.2
+        let side: CGFloat = 170
+        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(hasGround ? .black.opacity(0.22) : WidgetStyle.primary.opacity(0.08))
             .overlay {
                 if let image {
                     Image(nsImage: image)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        // Fitted when the shape of the frame is the shape of
+                        // the picture, so nothing is thrown away.
+                        .aspectRatio(contentMode: wide ? .fit : .fill)
                 } else {
                     Image(systemName: "music.note")
                         .font(.system(size: 52, weight: .medium))
-                        .foregroundStyle(WidgetStyle.primary.opacity(0.3))
+                        .foregroundStyle(hasGround ? .white.opacity(0.35)
+                                                   : WidgetStyle.primary.opacity(0.3))
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .frame(width: 170, height: 170)
+            .frame(width: wide ? 298 : side, height: wide ? 168 : side)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            // Only with a ground, and black rather than tinted: a shadow in
+            // the ground's own hue on the ground itself is invisible.
+            .shadow(color: hasGround ? .black.opacity(0.45) : .clear, radius: 22, y: 10)
+            .overlay {
+                if hasGround {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                }
+            }
             .accessibilityLabel("Artwork")
     }
 
@@ -98,10 +150,10 @@ struct MusicDetail: View {
         VStack(spacing: 2) {
             Text(track.title)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(WidgetStyle.primary)
+                .foregroundStyle(ink)
             Text(track.artist)
                 .font(WidgetStyle.caption(13))
-                .foregroundStyle(WidgetStyle.secondary)
+                .foregroundStyle(subInk)
         }
         // Truncated, never wrapped: the panel is sized once when it opens, so
         // a title that took a second line would be clipped by the window
@@ -120,9 +172,9 @@ struct MusicDetail: View {
                  alignment: .leading)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(WidgetStyle.secondary.opacity(0.3))
+                    Capsule().fill(trackInk)
                     Capsule()
-                        .fill(WidgetStyle.primary)
+                        .fill(ink)
                         .frame(width: max(0, geo.size.width * ratio))
                         // Playback advances at a constant rate, so gliding to
                         // each reading at that rate is the truth; a drag is

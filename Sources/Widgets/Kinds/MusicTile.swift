@@ -47,7 +47,10 @@ struct MusicTile: View {
         if context.isPreview { return Self.sample }
         let native = MusicService.shared.nowPlaying.map(Playing.init(native:))
         let browser = browsersEnabled
-            ? BrowserMedia.shared.track.map { Playing(browser: $0, artwork: BrowserMedia.shared.artwork) }
+            ? BrowserMedia.shared.track.map {
+                Playing(browser: $0, artwork: BrowserMedia.shared.artwork,
+                        tint: BrowserMedia.shared.tint)
+            }
             : nil
         if native?.isPlaying == true { return native }
         if browser?.isPlaying == true { return browser }
@@ -388,6 +391,9 @@ struct Playing {
     /// it.
     var sourceBundleID: String
 
+    /// The ground the detail panel stands on, when the artwork yielded one.
+    var tint: ArtworkTint?
+
     /// Whether anything beyond play/pause is meaningful.
     ///
     /// A `<video>` element has nothing to skip to, so browser playback offers
@@ -405,11 +411,12 @@ struct Playing {
         artwork = native.artwork
         isBrowser = false
         sourceBundleID = native.source.bundleID
+        tint = native.tint
     }
 
     /// Artwork comes from `BrowserMedia`, which fetches it once per video
     /// rather than once per poll, so it is passed in rather than read here.
-    init(browser: BrowserTrack, artwork: NSImage?) {
+    init(browser: BrowserTrack, artwork: NSImage?, tint: ArtworkTint?) {
         title = browser.title
         artist = browser.site
         isPlaying = browser.isPlaying
@@ -419,6 +426,7 @@ struct Playing {
         self.artwork = artwork
         isBrowser = true
         sourceBundleID = browser.browser.bundleID
+        self.tint = tint
     }
 }
 

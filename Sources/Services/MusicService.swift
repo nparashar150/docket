@@ -35,6 +35,9 @@ public struct NowPlaying: @unchecked Sendable, Equatable {
     public var elapsed: TimeInterval
     public var isPlaying: Bool
     public var artwork: NSImage?
+    /// The colour the panel stands on, taken from the artwork's bytes at
+    /// decode time rather than from the image afterwards.
+    public var tint: ArtworkTint?
     public var source: MusicSource
 
     /// 0…1, and never NaN - a live stream reports a zero duration.
@@ -190,6 +193,7 @@ public final class MusicService {
 
         if track.trackKey == artworkKey {
             track.artwork = nowPlaying?.artwork
+            track.tint = nowPlaying?.tint
             nowPlaying = track
             return
         }
@@ -204,12 +208,13 @@ public final class MusicService {
         // Apple Music artwork event can hang indefinitely, and a URL fetch
         // only stops at URLSession's 60s default. Either wedged the service
         // exactly the way arming the flag too early used to.
-        let image = await withTimeout(seconds: 5) {
+        let found = await withTimeout(seconds: 5) {
             await Bridge.artwork(for: result.artworkRef)
-        } ?? nil
+        }
         // A later track may have landed while the download was in flight.
         guard artworkKey == key, var current = nowPlaying, current.trackKey == key else { return }
-        current.artwork = image
+        current.artwork = found?.image
+        current.tint = found?.tint
         nowPlaying = current
     }
 
@@ -364,14 +369,21 @@ enum Bridge {
         }
     }
 
-    static func artwork(for ref: ArtworkRef?) async -> NSImage? {
+    /// The image and the colour behind it, together.
+    ///
+    /// Both branches already had the bytes in hand and dropped them into
+    /// `NSImage(data:)`, so the tint costs one call beside the decode. Doing
+    /// it later from the NSImage would mean re-encoding a picture we had.
+    /// `Bridge` is a bare enum and so nonisolated, which is where this work
+    /// belongs.
+    static func artwork(for ref: ArtworkRef?) async -> (image: NSImage?, tint: ArtworkTint?) {
         switch ref {
         case .none:
-            return nil
+            return (nil, nil)
         case .url(let url):
             // Never on the main thread, and a dead CDN just means no artwork.
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
-            return NSImage(data: data)
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return (nil, nil) }
+            return (NSImage(data: data), ArtworkTint.extract(data))
         case .appleMusic:
             let data = await offMain { () -> Data? in
                 guard case .value(let descriptor) = script(
@@ -379,8 +391,8 @@ enum Bridge {
                 ) else { return nil }
                 return descriptor.data
             }
-            guard let data, !data.isEmpty else { return nil }
-            return NSImage(data: data)
+            guard let data, !data.isEmpty else { return (nil, nil) }
+            return (NSImage(data: data), ArtworkTint.extract(data))
         }
     }
 

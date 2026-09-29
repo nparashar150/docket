@@ -241,7 +241,7 @@ struct WidgetDetailChrome: View {
             // Room for the tail on whichever side the shelf is.
             .padding(tailSide, PanelShape.arrowDepth)
             .frame(width: WidgetDetail.width(instance.kind), alignment: .leading)
-            .background(surface)
+            .background(surface(WidgetDetailBody.ground(instance, context)))
             .fixedSize()
             // Rises a little and fades in. It used to scale up out of the
             // tile, which is an iOS sheet's entrance; a panel on this
@@ -264,6 +264,9 @@ struct WidgetDetailChrome: View {
         }
     }
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
     private var outline: PanelShape {
         PanelShape(edge: edge, arrowOffset: arrowOffset)
     }
@@ -277,14 +280,48 @@ struct WidgetDetailChrome: View {
     /// stain and lost the vibrancy with it. `.popover` is documented as
     /// exactly this material, and a real popover's layer tree carries no tint
     /// at all, so neither does this.
-    private var surface: some View {
+    private func surface(_ ground: ArtworkTint?) -> some View {
         VisualEffectPlate(material: .popover, blending: .behindWindow)
+            // Inside the clip rather than behind the plate. As a
+            // `.background` on the body it would paint the whole window
+            // rect, which is wider than the panel by the tail's depth, and
+            // leave a square-cornered strip across the shelf-facing edge
+            // that the panel's shadow traces.
+            .overlay {
+                if let ground {
+                    LinearGradient(colors: [Self.colour(ground.top), Self.colour(ground.bottom)],
+                                   startPoint: .top, endPoint: .bottom)
+                }
+            }
+            // Opaque where there is a ground, because a translucent tint over
+            // a sampled desktop is how the accent stain happened twice
+            // before: the colour underneath is somebody's wallpaper and the
+            // result is unpredictable. Where there is no ground this is
+            // untouched and vibrancy still does its work.
+            //
+            // Reduce Transparency and Increase Contrast take the same door,
+            // which closes a gap every one of these panels had: the chrome
+            // never read either setting.
+            .overlay {
+                if ground == nil, reduceTransparency || contrast == .increased {
+                    Rectangle().fill(scheme == .dark ? Color(white: 0.11) : Color(white: 0.95))
+                }
+            }
             .clipShape(outline)
             .overlay {
-                // A hairline at the edge, not a drawn border.
-                outline.stroke(.primary.opacity(scheme == .dark ? 0.16 : 0.10),
+                // A hairline at the edge, not a drawn border. White over a
+                // ground: a dark hairline on a dark colour disappears.
+                outline.stroke(ground == nil
+                               ? Color.primary.opacity(scheme == .dark ? 0.16 : 0.10)
+                               : Color.white.opacity(0.14),
                                lineWidth: 0.5)
             }
+    }
+
+    /// `ArtworkTint` stays free of SwiftUI so the core can hold it, so the
+    /// conversion lives at the only place that needs it.
+    private static func colour(_ c: (red: Double, green: Double, blue: Double)) -> Color {
+        Color(.sRGB, red: c.red, green: c.green, blue: c.blue, opacity: 1)
     }
 
     /// Three points, away from the shelf, so it settles toward the tile.

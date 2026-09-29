@@ -100,6 +100,9 @@ public final class BrowserMedia {
     /// eight times a second at the shelf's rate, while the picture behind it
     /// changes only when the video does.
     public private(set) var artwork: NSImage?
+
+    /// The colour the panel stands on, from the same bytes.
+    public private(set) var tint: ArtworkTint?
     /// A browser has media tabs open but will not run our JavaScript.
     public private(set) var needsSetup = false
     /// Menu path for the browser behind `needsSetup`; empty when it is false.
@@ -249,6 +252,7 @@ public final class BrowserMedia {
         guard url != artworkURL else { return }
         artworkURL = url
         artwork = nil
+        tint = nil
         guard let url else { return }
         Task { [weak self] in
             var request = URLRequest(url: url)
@@ -260,8 +264,13 @@ public final class BrowserMedia {
                   (response as? HTTPURLResponse)?.statusCode == 200,
                   let image = NSImage(data: data)
             else { return }
+            // Detached on purpose: this Task body inherits main isolation
+            // from the actor it was started on, and a 16x16 decode plus a
+            // histogram is not main-thread work.
+            let tint = await ArtworkTint.extracted(from: data)
             guard let self, artworkURL == url else { return }
             artwork = image
+            self.tint = tint
         }
     }
 
