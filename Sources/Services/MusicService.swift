@@ -88,6 +88,18 @@ public final class MusicService {
     @ObservationIgnored private var polling = false
     /// Consecutive probes that never came back.
     @ObservationIgnored private var timeouts = 0
+
+    /// When we last spoke to the player ourselves.
+    @ObservationIgnored private var lastCommand: Date = .distantPast
+
+    /// How long after one of our own commands a timed-out probe is treated as
+    /// our own traffic rather than as the player refusing.
+    ///
+    /// Long enough to cover a burst of clicks plus one probe's budget, short
+    /// enough that something genuinely unresponsive still gives up within a
+    /// few seconds of the last press.
+    private static let commandGrace: TimeInterval = 5
+
     /// Set once a probe has hung; cleared when the user asks to connect.
     @ObservationIgnored private var blocked = false
     @ObservationIgnored private var lastProbe: Date = .distantPast
@@ -168,9 +180,14 @@ public final class MusicService {
     /// side's three-strike backoff.
     private func stall() {
         polling = false
-        timeouts += 1
         // Back off rather than hammering a player that is busy.
         lastProbe = .now
+        // Our own traffic, not a refusal. Same shape as the browser side:
+        // commands and probes share a queue, so a run of presses starves the
+        // probe behind them and three of those blocked the service, leaving
+        // the tile asking for consent it already had.
+        guard Date().timeIntervalSince(lastCommand) >= Self.commandGrace else { return }
+        timeouts += 1
         guard timeouts >= 3 else { return }
         blocked = true
         needsAutomationPermission = true
@@ -253,6 +270,7 @@ public final class MusicService {
     private func command(_ body: String) {
         guard let source = nowPlaying?.source else { return }
         if body == "playpause" { optimistically { $0.isPlaying.toggle() } }
+        lastCommand = .now
         Bridge.send(body, to: source)
     }
 

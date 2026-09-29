@@ -129,6 +129,18 @@ public final class BrowserMedia {
     @ObservationIgnored private var lastProbe: Date = .distantPast
     /// Consecutive probes that ran out of time.
     @ObservationIgnored private var timeouts = 0
+
+    /// When we last spoke to the browser ourselves.
+    @ObservationIgnored private var lastCommand: Date = .distantPast
+
+    /// How long after one of our own commands a timed-out probe is treated as
+    /// our own traffic rather than as the player refusing.
+    ///
+    /// Long enough to cover a burst of clicks plus one probe's budget, short
+    /// enough that something genuinely unresponsive still gives up within a
+    /// few seconds of the last press.
+    private static let commandGrace: TimeInterval = 5
+
     /// When the last full rescan ran.
     @ObservationIgnored private var lastRescan: Date = .distantPast
     /// How rarely a full rescan may run while a cached tab still answers.
@@ -229,9 +241,25 @@ public final class BrowserMedia {
     /// process, with the tile stuck on Connect and nothing left to retry it.
     private func stalled() {
         polling = false
-        timeouts += 1
         // Back off rather than hammering a browser that is busy.
         lastProbe = .now
+        // Our own traffic, not a refusal.
+        //
+        // Commands and probes share one serial queue, and an Apple Event to a
+        // browser is not quick. Pressing play and pause quickly puts several
+        // toggles in that queue, the probe behind them misses its budget
+        // through no fault of the browser, and three of those in a row
+        // blocked browser support outright: the reading dropped, the tile fell
+        // back to Connect, and the only way out was a consent dialog for
+        // consent that had already been given. Which is to say the widget
+        // broke because it was being used.
+        //
+        // A probe that times out while we are still talking says nothing
+        // about whether the browser will answer, so it does not get a strike.
+        // A browser that is genuinely refusing stops being spoken to and
+        // starts collecting them within a few seconds.
+        guard Date().timeIntervalSince(lastCommand) >= Self.commandGrace else { return }
+        timeouts += 1
         guard timeouts >= 3 else { return }
         blocked = true
         needsPermission = true
@@ -315,6 +343,7 @@ public final class BrowserMedia {
     public func playPause() {
         guard let current = track, let tab = cached else { return }
         track?.isPlaying.toggle()
+        lastCommand = .now
         Task { await BrowserBridge.toggle(tab, browser: current.browser) }
     }
 
@@ -332,6 +361,7 @@ public final class BrowserMedia {
         blocked = false
         polling = false
         timeouts = 0
+        lastCommand = .distantPast
         lastProbe = .distantPast
         Task {
             await BrowserBridge.ask()
