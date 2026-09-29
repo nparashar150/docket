@@ -112,16 +112,22 @@ struct SettingsView: View {
                         // The glyph sits on its own tinted square, sized so
                         // the four rows line up whatever each symbol's own
                         // proportions are.
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .fill(section.tint.gradient)
-                            .frame(width: 22, height: 22)
+                            // System Settings runs these at 28 with the glyph
+                            // at about half. At 22 they read as list bullets
+                            // rather than as the thing you aim at.
+                            .frame(width: 28, height: 28)
                             .overlay {
                                 Image(systemName: section.symbol)
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .font(.system(size: 14, weight: .semibold))
                                     .foregroundStyle(.white)
                             }
                     }
                     .tag(section.id)
+                    // Rows sized to the icon rather than to the text, which
+                    // is what stops a 28pt glyph from crowding its label.
+                    .padding(.vertical, 3)
                     .staggered(index, step: 0.05)
                 }
             }
@@ -408,9 +414,17 @@ struct SettingsView: View {
             }
 
             Section("Contents") {
+                Toggle("Widgets only", isOn: $state.customDock.widgetsOnly)
+                    .help("Hide apps, folders and links, and show only widgets. Nothing is removed; they come back when this is off.")
+                // Both of these add apps, so neither means anything on a
+                // shelf that is showing none. Disabled rather than hidden:
+                // a control that vanishes when you touch a switch above it
+                // reads as a glitch, and its state is worth seeing.
                 Toggle("Show running apps", isOn: $state.customDock.showRunningApps)
                     .help("Include open apps alongside pinned items.")
+                    .disabled(state.customDock.widgetsOnly)
                 Toggle("Show Trash", isOn: $state.customDock.showTrash)
+                    .disabled(state.customDock.widgetsOnly)
 
                 // Rearranging a mirrored app takes the list over, which is
                 // right, but nothing used to give it back: one drag and the

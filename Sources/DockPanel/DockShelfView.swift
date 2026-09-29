@@ -192,11 +192,20 @@ struct DockShelfView: View {
         var result = Solved()
 
         // Read once: it is not stored, so each access rebuilds the array.
-        let items = app.effectiveItems
+        //
+        // Filtered rather than edited: the apps stay in the profile and come
+        // back the moment the setting goes off, so turning it on costs
+        // nothing and turning it off loses nothing.
+        let items = settings.widgetsOnly
+            ? app.effectiveItems.filter(\.isWidget)
+            : app.effectiveItems
         var entries = items.map {
             Entry(id: $0.id, item: $0, isRunningApp: false, label: label(for: $0))
         }
-        if settings.showRunningApps {
+        // Running apps are apps. Offering to append them to a shelf that is
+        // deliberately showing no apps would be the same control contradicting
+        // itself.
+        if settings.showRunningApps, !settings.widgetsOnly {
             let running = AppCatalog.shared.unpinned(from: items)
             if !running.isEmpty { result.slots = entries.map(Slot.item) + [.separator] }
             for app in running {
@@ -212,7 +221,8 @@ struct DockShelfView: View {
         // Last, behind its own divider, which is where Apple's Dock keeps it.
         // Not a profile item: it is a setting, so it is appended per solve
         // rather than stored, and it can never be dragged out of place.
-        if settings.showTrash, let trash = AppCatalog.trashURL {
+        // The Trash is not a widget either.
+        if settings.showTrash, !settings.widgetsOnly, let trash = AppCatalog.trashURL {
             entries.append(Entry(id: Self.trashID,
                                  item: .folder(id: Self.trashID,
                                                ref: FileRef(url: trash),
