@@ -391,7 +391,24 @@ public final class AppState {
     /// beside the Dock than on top of it. Everything else about the look
     /// (size, magnification, material, apps) is still mirrored.
     public var effectivePosition: DockPosition {
-        guard following else { return state.customDock.position }
+        // Following means taking the edge Apple's Dock is *not* on, so the
+        // two surfaces do not stack. That is right while both are on screen
+        // and exactly wrong once the shelf has replaced the Dock.
+        //
+        // In `customReplacement` the shelf covers the Dock rather than
+        // avoiding it, and the Dock is moved to the shelf's edge to reserve
+        // the strip: `syncStrut` claims at this very property. So following
+        // here is the shelf chasing a move it caused. Claiming put the Dock
+        // at the bottom, this read the Dock at the bottom and sent the shelf
+        // to the left, off the strip it had just claimed, which is how the
+        // shelf ended up standing on its end away from the Dock it was
+        // supposed to be covering.
+        //
+        // Size, magnification and hiding still follow; it is only the edge
+        // that cannot, because the edge is the thing being dictated.
+        guard following, state.setup != .customReplacement else {
+            return state.customDock.position
+        }
         return system.position == .bottom ? .left : .bottom
     }
 
