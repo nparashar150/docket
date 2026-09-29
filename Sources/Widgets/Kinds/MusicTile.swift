@@ -94,29 +94,30 @@ struct MusicTile: View {
     @ViewBuilder
     private var content: some View {
         if isMini {
-            // Artwork, with play and pause as a glyph on the corner.
+            // Just the control.
             //
-            // This was inert, on the reasoning that a control here would
-            // swallow the click that opens the panel. That is true of a
-            // control the size of the card, which is what handing the whole
-            // square to `Artwork`'s button mode would be: in mini the
-            // artwork *is* the chip. It is not true of `TileGlyph`, which is
-            // only ever as big as itself and leaves the rest of the chip to
-            // the shelf. Same division the focus timer and the stopwatch
-            // already use, and the reason the mini chip could previously do
-            // nothing at all without opening a panel first.
+            // Mini is a 64pt chip and artwork there is a thumbnail cropped to
+            // a square: an album cover survives it, a video thumbnail becomes
+            // two faces and half a word of somebody's title. At that size it
+            // is texture rather than information, and it was competing with
+            // the one thing the chip is for.
             //
-            // Nothing playing means nothing to toggle, so the glyph is
-            // absent rather than dead, and the whole chip opens the panel.
-            Artwork(image: playing?.artwork, fallback: sourceIcon(playing),
-                    side: context.position.isVertical ? 52 : 44, corner: 10)
-                .overlay(alignment: .bottomTrailing) {
-                    if let playing, !context.isPreview {
-                        TileGlyph(symbol: playing.isPlaying ? "pause.fill" : "play.fill",
-                                  size: 9) { toggle(playing) }
-                            .accessibilityLabel(playing.isPlaying ? "Pause" : "Play")
-                    }
-                }
+            // Still a glyph rather than the whole card, so the rest of the
+            // chip keeps the shelf's click and the panel stays reachable.
+            // It is simply the only thing on the chip now, so it can be the
+            // size it deserves instead of tucked into a corner.
+            let side: CGFloat = context.position.isVertical ? 15 : 13
+            if let playing, !context.isPreview {
+                TileGlyph(symbol: playing.isPlaying ? "pause.fill" : "play.fill",
+                          size: side) { toggle(playing) }
+                    .accessibilityLabel(playing.isPlaying ? "Pause" : "Play")
+            } else {
+                // Nothing playing is nothing to toggle, so the chip shows what
+                // it is and the whole of it opens the panel.
+                Image(systemName: "music.note")
+                    .font(.system(size: side * 1.4, weight: .medium))
+                    .foregroundStyle(WidgetStyle.secondary)
+            }
         } else if needsPermission, playing == nil {
             connect
         } else if let playing {
