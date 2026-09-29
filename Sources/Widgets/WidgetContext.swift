@@ -47,8 +47,34 @@ public enum WidgetStyle {
     /// Digits that change every second must not make the layout shimmer.
     public static var monospacedDigits: Font.Design { .default }
 
+    /// The system's own, unmodified.
+    ///
+    /// Every macOS text token is a pure white or a pure black varying only in
+    /// alpha, read from AppKit on macOS 26: label 0.847 in both appearances,
+    /// secondary 0.549 dark and 0.498 light, tertiary 0.247 and 0.259,
+    /// quaternary 0.098. That is the mechanism of vibrancy rather than an
+    /// implementation detail, and it is why they work on a plate that samples
+    /// the desktop: the text takes up what is behind it instead of sitting on
+    /// top of it opaquely.
+    ///
+    /// `secondary` used to carry `.opacity(0.85)` on top of that, which took
+    /// an already-translucent token to an effective 0.467 dark and 0.423
+    /// light. That is below every level the system defines, and measured over
+    /// this app's own plates it cost 4.68:1 against 5.95:1 in the dark and
+    /// 3.02:1 against 3.86:1 in the light.
+    ///
+    /// The system ships four levels precisely so that nothing has to invent a
+    /// fifth by multiplying one. Where something wants to sit back further
+    /// than secondary the answer is `tertiaryLabelColor`, which is a level
+    /// rather than a fraction.
+    ///
+    /// Worth knowing and not worth fighting: secondary over a light plate
+    /// reaches 3.86:1, short of WCAG's 4.5:1 for body text. That is macOS's
+    /// own figure for supporting text, so matching it is the point. Anything
+    /// that must be read at any cost should be `primary`, not a secondary
+    /// pushed opaque until it passes.
     public static let primary = Color.primary
-    public static let secondary = Color.secondary.opacity(0.85)
+    public static let secondary = Color.secondary
 
     public static func tint(_ color: PaletteColor) -> Color { Color(hex: color.hex) }
     public static func paper(_ color: PaperColor) -> Color { Color(hex: color.hex) }
