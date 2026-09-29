@@ -30,6 +30,20 @@ public enum WidgetStyle {
     public static let corner: CGFloat = 18
     public static let inset: CGFloat = 10
 
+    /// Enough black over any artwork to keep white ink legible on it.
+    ///
+    /// Derived rather than chosen. The worst case is a white cover, where a
+    /// scrim of `a` leaves a composite of `1 - a`, and white label ink at its
+    /// own 0.847 alpha needs that composite at or below about 0.42 to clear
+    /// 4.5:1. 0.60 lands at 4.67:1 against pure white and better against
+    /// everything else, and leaves 40% of the cover showing, which is enough
+    /// for it to read as the record it is.
+    ///
+    /// The cover is therefore always a dark surface, whatever the appearance,
+    /// which is why the tile pins its ink white alongside this rather than
+    /// letting it follow the system.
+    public static let artworkScrim = 0.60
+
     /// The large figure - times, percentages, amounts.
     public static func value(_ size: CGFloat = 26) -> Font {
         .system(size: size, weight: .bold)
@@ -101,6 +115,12 @@ public extension Color {
 /// The surface every widget draws on.
 public struct WidgetSurface<Content: View>: View {
     public var fill: Color?
+    /// A picture behind the card instead of a colour.
+    ///
+    /// Only Now Playing uses it, and it is here rather than drawn by that
+    /// tile so a card with a cover behind it is still a card: same corner,
+    /// same edge, same lift under the pointer.
+    public var image: NSImage?
     @ViewBuilder public var content: Content
 
     @Environment(\.colorScheme) private var scheme
@@ -122,8 +142,11 @@ public struct WidgetSurface<Content: View>: View {
         scheme == .dark ? .white.opacity(0.07) : .black.opacity(0.06)
     }
 
-    public init(fill: Color? = nil, @ViewBuilder content: () -> Content) {
+
+    public init(fill: Color? = nil, image: NSImage? = nil,
+                @ViewBuilder content: () -> Content) {
         self.fill = fill
+        self.image = image
         self.content = content()
     }
 
@@ -134,6 +157,20 @@ public struct WidgetSurface<Content: View>: View {
             .background {
                 RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous)
                     .fill(fill ?? cardFill)
+                    .overlay {
+                        if let image {
+                            Image(nsImage: image)
+                                .resizable()
+                                // Filled and clipped: a cover is square and a
+                                // video thumbnail is not, and a card is
+                                // neither. Letterboxing a background would
+                                // draw bars inside the card.
+                                .aspectRatio(contentMode: .fill)
+                                .overlay(Color.black.opacity(WidgetStyle.artworkScrim))
+                                .clipShape(RoundedRectangle(cornerRadius: WidgetStyle.corner,
+                                                            style: .continuous))
+                        }
+                    }
                     // Lifted a little out of the recess under the pointer.
                     .overlay {
                         RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous)

@@ -24,6 +24,25 @@ struct MusicTile: View {
 
     private var browsersEnabled: Bool { config.bool("browsers", default: true) }
 
+    /// The artwork, when there is one to stand on.
+    private var cover: NSImage? {
+        guard !context.isPreview else { return nil }
+        return playing?.artwork
+    }
+
+    /// Ink, pinned once a cover is behind it.
+    ///
+    /// `WidgetSurface` lays 60% black over the artwork, which makes the card
+    /// a dark surface in either appearance. `WidgetStyle.primary` follows the
+    /// system, so in a light appearance it would go black and disappear into
+    /// exactly the scrim that is there to keep text readable. Same reasoning
+    /// as the detail panel's ground and the sticky note's fixed paper.
+    private var ink: Color { cover == nil ? WidgetStyle.primary : .white }
+
+    private var subInk: Color {
+        cover == nil ? WidgetStyle.secondary : Color(white: 0.82)
+    }
+
     /// The icon of whichever app is playing, for the tile to show when there
     /// is no album art.
     ///
@@ -71,7 +90,14 @@ struct MusicTile: View {
     ))
 
     var body: some View {
-        WidgetSurface {
+        // The cover is the card.
+        //
+        // It used to be a thumbnail drawn inside the card, which on a 64pt
+        // chip is a square crop of a 16:9 frame and on the wide tile is
+        // 38 points of picture competing with the text beside it. Behind
+        // everything it is the record you are listening to rather than a
+        // stamp of it.
+        WidgetSurface(image: cover) {
             content
         }
         .onAppear {
@@ -116,7 +142,7 @@ struct MusicTile: View {
                 // it is and the whole of it opens the panel.
                 Image(systemName: "music.note")
                     .font(.system(size: side * 1.4, weight: .medium))
-                    .foregroundStyle(WidgetStyle.secondary)
+                    .foregroundStyle(subInk)
             }
         } else if needsPermission, playing == nil {
             connect
@@ -176,9 +202,10 @@ struct MusicTile: View {
             time(MusicTime.clock(track.elapsed))
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(WidgetStyle.secondary.opacity(0.3))
+                    Capsule().fill(cover == nil ? WidgetStyle.secondary.opacity(0.3)
+                                                : .white.opacity(0.42))
                     Capsule()
-                        .fill(WidgetStyle.primary)
+                        .fill(ink)
                         .frame(width: max(0, geo.size.width * track.progress))
                         // Playback advances at a constant rate, so gliding to
                         // each new reading at that rate *is* the truth - and a
@@ -208,7 +235,7 @@ struct MusicTile: View {
             .font(WidgetStyle.caption(11))
             .monospacedDigit()
             .rollingValue(text)
-            .foregroundStyle(WidgetStyle.secondary)
+            .foregroundStyle(subInk)
             .lineLimit(1)
             .fixedSize()
     }
@@ -234,7 +261,7 @@ struct MusicTile: View {
     private func title(_ track: Playing, size: CGFloat) -> some View {
         Text(track.title)
             .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(WidgetStyle.primary)
+            .foregroundStyle(ink)
             .lineLimit(1)
             // Truncated, never shrunk. A video title runs long, and scaling it
             // to fit drove the most important line on the tile down to a few
@@ -245,7 +272,7 @@ struct MusicTile: View {
     private func artist(_ track: Playing, size: CGFloat) -> some View {
         Text(track.artist)
             .font(WidgetStyle.caption(size))
-            .foregroundStyle(WidgetStyle.secondary)
+            .foregroundStyle(subInk)
             .lineLimit(1)
             .truncationMode(.tail)
     }
@@ -295,7 +322,7 @@ struct MusicTile: View {
         Button(action: { if !context.isPreview { action() } }) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .medium))
-                .foregroundStyle(WidgetStyle.primary)
+                .foregroundStyle(ink)
                 .frame(minWidth: size)
                 .contentShape(Rectangle())
         }
@@ -324,7 +351,7 @@ struct MusicTile: View {
                     // only just fits; truncating it to "Conne…" reads as a bug.
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(WidgetStyle.primary)
+            .foregroundStyle(ink)
             .padding(.vertical, 3)
             .contentShape(Rectangle())
         }
@@ -348,7 +375,7 @@ struct MusicTile: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.5)
         }
-        .foregroundStyle(WidgetStyle.secondary)
+        .foregroundStyle(subInk)
         .frame(maxWidth: .infinity)
         .help(setup.map { "A browser tab has media, but Docket cannot read it. Turn on \($0)." }
               ?? (open ? "Nothing is playing." : "Docket reads \(sourceNames), and video in a scriptable browser tab."))
