@@ -71,7 +71,13 @@ struct MusicDetail: View {
                 // A video with no readable duration would draw two 0:00 clocks
                 // around a bar that can never move, so it gets none.
                 if track.duration > 0 || !track.isBrowser { scrubber(track) }
-                transport(track)
+                // Browser playback has nothing to skip to, so its transport is
+                // a single button, and a row of its own for one control spent
+                // about eighty points of a four hundred point panel on empty
+                // space either side of it. It rides with the scrubber instead,
+                // which is where a compact player puts it. A native player
+                // has five controls and genuinely needs the row.
+                if !track.isBrowser { transport(track) }
             } else if needsPermission {
                 connect
             } else {
@@ -168,6 +174,13 @@ struct MusicDetail: View {
     private func scrubber(_ track: Playing) -> some View {
         let ratio = scrubbing ?? track.progress
         return HStack(spacing: 9) {
+            if track.isBrowser {
+                play(track.isPlaying, compact: true) { toggle(track) }
+                    // Pulled back toward the times: the disc carries its own
+                    // margin and the row's spacing on top of it reads as a
+                    // gap rather than as a group.
+                    .padding(.trailing, -3)
+            }
             time(MusicTime.clock(scrubbing.map { $0 * track.duration } ?? track.elapsed),
                  alignment: .leading)
             GeometryReader { geo in
@@ -274,20 +287,24 @@ struct MusicDetail: View {
     }
 
     /// The one you came for.
-    private func play(_ playing: Bool, action: @escaping () -> Void) -> some View {
+    ///
+    /// `compact` is the same control sized to sit in the scrubber's row
+    /// rather than to anchor a row of its own.
+    private func play(_ playing: Bool, compact: Bool = false,
+                      action: @escaping () -> Void) -> some View {
         Button {
             guard !context.isPreview else { return }
             action()
         } label: {
             Image(systemName: playing ? "pause.fill" : "play.fill")
-                .font(.system(size: 21, weight: .semibold))
+                .font(.system(size: compact ? 13 : 21, weight: .semibold))
                 // Optical, not geometric: play.fill is a triangle whose mass
                 // sits left of its box, so centring the box leaves it looking
                 // shoved to one side inside a circle. Pause is symmetric and
                 // needs none.
                 .offset(x: playing ? 0 : 1.5)
         }
-        .buttonStyle(TransportButton(primary: true, ink: ink))
+        .buttonStyle(TransportButton(primary: true, ink: ink, compact: compact))
         .accessibilityLabel(playing ? "Pause" : "Play")
     }
 
@@ -375,10 +392,12 @@ struct MusicDetail: View {
 private struct TransportButton: ButtonStyle {
     var primary: Bool
     var ink: Color
+    /// Sized to ride in another row rather than to anchor one.
+    var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
-        let side: CGFloat = primary ? 46 : 34
+        let side: CGFloat = compact ? 28 : (primary ? 46 : 34)
         return configuration.label
             // The secondaries sit back a little so the primary leads without
             // having to be enormous.
