@@ -92,6 +92,15 @@ public final class MusicService {
     /// When we last spoke to the player ourselves.
     @ObservationIgnored private var lastCommand: Date = .distantPast
 
+    /// The play state the user asked for, until a reading confirms it.
+    @ObservationIgnored private var asked: Bool?
+
+    /// How long a reading may contradict what was just asked for before it is
+    /// believed. Same bargain as the browser side: long enough for the player
+    /// to hear the command and be read again, short enough that a command
+    /// which never landed corrects itself quickly.
+    private static let commandHold: TimeInterval = 1.5
+
     /// How long after one of our own commands a timed-out probe is treated as
     /// our own traffic rather than as the player refusing.
     ///
@@ -208,6 +217,18 @@ public final class MusicService {
             return
         }
 
+        // A probe already in flight when the button was pressed comes back
+        // describing the player as it was, and believing it flips the glyph
+        // back under the pointer. Held until a reading agrees, or until the
+        // window closes and a command that never landed is admitted.
+        if let asked {
+            if track.isPlaying == asked || Date().timeIntervalSince(lastCommand) >= Self.commandHold {
+                self.asked = nil
+            } else {
+                track.isPlaying = asked
+            }
+        }
+
         if track.trackKey == artworkKey {
             track.artwork = nowPlaying?.artwork
             track.tint = nowPlaying?.tint
@@ -269,7 +290,10 @@ public final class MusicService {
 
     private func command(_ body: String) {
         guard let source = nowPlaying?.source else { return }
-        if body == "playpause" { optimistically { $0.isPlaying.toggle() } }
+        if body == "playpause" {
+            optimistically { $0.isPlaying.toggle() }
+            asked = nowPlaying?.isPlaying
+        }
         lastCommand = .now
         Bridge.send(body, to: source)
     }

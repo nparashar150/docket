@@ -133,6 +133,17 @@ public final class BrowserMedia {
     /// When we last spoke to the browser ourselves.
     @ObservationIgnored private var lastCommand: Date = .distantPast
 
+    /// The play state the user asked for, until a reading confirms it.
+    @ObservationIgnored private var asked: Bool?
+
+    /// How long a reading is allowed to contradict what the user just asked
+    /// for before it is believed.
+    ///
+    /// Long enough for a command to reach the page and the next reading to
+    /// come back from it, short enough that a command which never landed
+    /// corrects itself while the finger is still near the button.
+    private static let commandHold: TimeInterval = 1.5
+
     /// How long after one of our own commands a timed-out probe is treated as
     /// our own traffic rather than as the player refusing.
     ///
@@ -309,7 +320,26 @@ public final class BrowserMedia {
         needsPermission = poll.denied
         cached = poll.tab
 
-        if let found = poll.track {
+        if var found = poll.track {
+            // Hold what was asked for until the page agrees.
+            //
+            // A command is an Apple Event and a reading is a separate one, so
+            // a poll in flight when the button is pressed comes back
+            // describing the page as it was. Believing it flips the glyph
+            // back under the pointer, and the next reading flips it again,
+            // which is the flicker that made a press feel like it had not
+            // taken. Nothing is wrong with the press; the answer is simply
+            // older than the question.
+            //
+            // Released the moment a reading agrees, so a command that never
+            // landed is corrected by the next poll rather than papered over.
+            if let asked {
+                if found.isPlaying == asked || Date().timeIntervalSince(lastCommand) >= Self.commandHold {
+                    self.asked = nil
+                } else {
+                    found.isPlaying = asked
+                }
+            }
             track = found
             adoptArtwork(found.artworkURL)
             needsSetup = false
@@ -343,6 +373,7 @@ public final class BrowserMedia {
     public func playPause() {
         guard let current = track, let tab = cached else { return }
         track?.isPlaying.toggle()
+        asked = track?.isPlaying
         lastCommand = .now
         Task { await BrowserBridge.toggle(tab, browser: current.browser) }
     }
