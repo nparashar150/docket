@@ -41,7 +41,13 @@ struct MaterialBackground: View {
                 }
             }
             .compositingGroup()
-            .shadow(color: .black.opacity(scheme == .dark ? 0.34 : 0.18), radius: 9, x: 0, y: 4)
+            // Glass casts its own, and stacking ours on top of it is why the
+            // shelf sat heavier on the desktop than Apple's Dock does. The
+            // frosted plate is an NSVisualEffectView and genuinely has none.
+            .shadow(color: .black.opacity(material == .liquidGlass
+                                          ? 0
+                                          : (scheme == .dark ? 0.34 : 0.18)),
+                    radius: 9, x: 0, y: 4)
     }
 
     @ViewBuilder
@@ -71,24 +77,35 @@ struct MaterialBackground: View {
             .clipShape(shape)
     }
 
-    /// The real macOS 26 material, shape-matched to the shelf.
+    /// The real macOS 26 material, shape-matched to the shelf, and nothing on
+    /// top of it.
     ///
-    /// Glass samples whatever is behind the window, so over a white page it
-    /// turns white - and the shelf's labels, which follow the *system*
-    /// appearance, stayed white and vanished into it. Measured against the
-    /// real Dock in the same screenshot: the Dock holds ~47 luminance units of
-    /// separation from its backdrop, this held 23. The scrim floors that
-    /// separation so the plate can never wash out to match its own text.
+    /// There used to be a flat scrim here, 22% black in the dark and 26%
+    /// white in the light, added because glass samples what is behind the
+    /// window: over a white page the plate turns white and chrome that
+    /// follows the system appearance disappears into it.
+    ///
+    /// The reasoning was sound and the remedy was aimed at the wrong thing. A
+    /// uniform fill over glass suppresses exactly the refraction and the
+    /// specular edge that make the material read as glass, so the shelf stops
+    /// looking like the Dock and starts looking like tinted plastic, which is
+    /// obvious the moment Mission Control puts the two side by side. Dimming
+    /// the surface to protect what is drawn on it is backwards: the surface
+    /// is the thing that has to match, and the chrome is the thing that can
+    /// be pinned.
+    ///
+    /// Known limit, stated rather than papered over: the separator, the grip
+    /// and the add button in `DockShelfView` still take `Color.primary`, so
+    /// on a light wallpaper under a dark appearance they can lose contrast
+    /// against a plate that has sampled it. `.regular` glass carries real
+    /// density of its own, so this has not been reproduced here; the fix
+    /// when it is would be to pin those three, not to dim the plate again.
+    ///
+    /// It also applied in `.clear`, so choosing clear glass got 22% black
+    /// over it and was not clear at all.
     private var liquid: some View {
         Color.clear
             .glassEffect(glass == .clear ? .clear : .regular, in: shape)
-            .overlay { shape.fill(scrim) }
-    }
-
-    /// Pulls the plate *away* from the label colour, whichever way that is:
-    /// white labels need a floor, black labels need a ceiling.
-    private var scrim: Color {
-        scheme == .dark ? .black.opacity(0.22) : .white.opacity(0.26)
     }
 }
 
