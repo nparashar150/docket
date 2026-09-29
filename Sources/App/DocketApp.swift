@@ -84,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startUpdateChecks(state)
 
         SystemDockSettings.shared.start()
+        // Reads the wallpaper, not the screen, so it needs no permission.
+        DesktopLuminance.shared.start()
         SystemMetrics.shared.start()
         NetworkMetrics.shared.start()
         BatteryMetrics.shared.start()

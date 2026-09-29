@@ -134,7 +134,15 @@ public struct WidgetSurface<Content: View>: View {
     /// Dockset holds a card at roughly 0.85x the plate's luminance; a black
     /// tint reproduces that ratio against any backdrop the glass samples.
     private var cardFill: Color {
-        scheme == .dark ? .black.opacity(0.16) : .white.opacity(0.40)
+        // In the dark the card's job is to be darker than a plate whose
+        // brightness belongs to the wallpaper rather than to the appearance.
+        // 0.16 is right over a dark desktop and nowhere near enough over a
+        // white one, where white ink on a card measures 1.37:1. See
+        // `DesktopLuminance.cardAlpha`, which returns exactly 0.16 whenever
+        // the desktop is dark, so the common case is untouched.
+        scheme == .dark
+            ? .black.opacity(DesktopLuminance.shared.cardAlpha)
+            : .white.opacity(0.40)
     }
 
     /// Just enough to catch the edge; the fill does the work.
