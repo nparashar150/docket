@@ -330,17 +330,24 @@ struct SettingsView: View {
             }
 
             Section("Placement") {
-                // .disabled was inside the Picker's content, so it applied to
-                // the ForEach and never to the Picker: the control stayed live
-                // while following, accepted a choice, and the shelf ignored it.
+                // Hidden while the Dock dictates it, not greyed.
+                //
+                // Matching the macOS Dock is the default, so a greyed Position
+                // and Size were two permanently dead controls for anyone who
+                // never turned it off, and a third in Behaviour. The "Currently"
+                // row above already says what is being inherited, which is the
+                // explanation a disabled control was standing in for.
+                //
+                // .disabled was also in the wrong place here: inside the
+                // Picker's content it applied to the ForEach and never to the
+                // Picker, so the control stayed live while following, accepted
+                // a choice, and the shelf ignored it.
+                if !state.customDock.followSystemDock {
                 Picker("Position", selection: $state.customDock.position) {
                     ForEach(DockPosition.allCases, id: \.self) { Text(title($0)).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .disabled(state.customDock.followSystemDock)
-                .help(state.customDock.followSystemDock
-                      ? "While matching the macOS Dock, the shelf takes a free edge beside it."
-                      : "Which edge the shelf sits on.")
+                .help("Which edge the shelf sits on.")
 
                 Picker("Display", selection: $state.customDock.displayID) {
                     Text("Active display").tag(UInt32?.none)
@@ -374,22 +381,30 @@ struct SettingsView: View {
                         Button("Match the Dock's size", action: onResumeFollowingScale)
                     }
                 }
+                }
             }
 
-            Section("Material") {
+            Section("Appearance") {
                 Picker("Material", selection: $state.customDock.material) {
                     Text("Frosted").tag(DockMaterial.frosted)
                     Text("Liquid Glass").tag(DockMaterial.liquidGlass)
                 }
                 .pickerStyle(.segmented)
 
+                if state.customDock.material == .liquidGlass {
                 Picker("Glass style", selection: $state.customDock.glass) {
                     ForEach(GlassStyle.allCases, id: \.self) { Text(title($0)).tag($0) }
                 }
-                // Disabled rather than hidden so the section does not resize
-                // every time the material changes.
-                .disabled(state.customDock.material != .liquidGlass)
                 .help("Clear is transparent; Regular keeps a tint. Reduce transparency in Accessibility settings overrides both.")
+                }
+
+                // Magnification lives here rather than under Contents, where
+                // it was filed. It is not contents: it changes how a tile
+                // looks under the pointer, which is this section's subject.
+                if !state.customDock.followSystemDock {
+                    Toggle("Magnification", isOn: $state.customDock.magnification)
+                        .help("Grow icons under the pointer.")
+                }
             }
 
             Section("Behaviour") {
@@ -397,18 +412,21 @@ struct SettingsView: View {
                 // own setting. It used to stay live there and simply have no
                 // effect, which reads as a broken toggle rather than one that
                 // does not apply.
-                Toggle("Automatically hide", isOn: $state.customDock.autoHide)
-                    .disabled(state.customDock.followSystemDock)
-                    .help(state.customDock.followSystemDock
-                          ? "While matching the macOS Dock, the shelf hides when the Dock does."
-                          : "Reveal the shelf when the pointer reaches its screen edge.")
-                Toggle("Show handle when hidden", isOn: $state.customDock.showHandleWhenHidden)
-                    .help("Leaves a sliver of the shelf on screen so you can see where it is. Reaching the edge still reveals it either way.")
-                    .disabled(!state.customDock.autoHide)
-                    .help("A small visible handle while hidden. The edge still reveals the Dock without it.")
+                if !state.customDock.followSystemDock {
+                    Toggle("Automatically hide", isOn: $state.customDock.autoHide)
+                        .help("Reveal the shelf when the pointer reaches its screen edge.")
+                }
+                // Only means anything while something is hiding, so it
+                // follows whichever switch is deciding that.
+                if state.customDock.followSystemDock || state.customDock.autoHide {
+                    Toggle("Show handle when hidden", isOn: $state.customDock.showHandleWhenHidden)
+                        .help("Leaves a sliver of the shelf on screen so you can see where it is. Reaching the edge still reveals it either way.")
+                }
+                // One `.help` each. Two of these carried a second that
+                // silently replaced the first, so the longer and more useful
+                // sentence was never shown.
                 Toggle("Hide when the macOS Dock appears", isOn: $state.customDock.hideWhenMacOSDockAppears)
                     .help("Only matters when both are on the same edge. An auto-hidden Dock and the shelf share a reveal trigger there, so reaching for one uncovers the other.")
-                    .help("Gets out of the way when both Docks share a screen edge.")
                 Toggle("Use as desktop widget", isOn: $state.customDock.useAsDesktopWidget)
                     .help("Keeps the Dock on the desktop, behind app windows.")
             }
@@ -420,11 +438,16 @@ struct SettingsView: View {
                 // shelf that is showing none. Disabled rather than hidden:
                 // a control that vanishes when you touch a switch above it
                 // reads as a glitch, and its state is worth seeing.
-                Toggle("Show running apps", isOn: $state.customDock.showRunningApps)
-                    .help("Include open apps alongside pinned items.")
-                    .disabled(state.customDock.widgetsOnly)
-                Toggle("Show Trash", isOn: $state.customDock.showTrash)
-                    .disabled(state.customDock.widgetsOnly)
+                // Both add apps, so neither is a question a widgets-only
+                // shelf is asking. They were disabled here, which is the right
+                // instinct beside a sibling toggle and the wrong one under a
+                // switch that changes what the whole section is about: three
+                // greyed rows is most of the section reading as broken.
+                if !state.customDock.widgetsOnly {
+                    Toggle("Show running apps", isOn: $state.customDock.showRunningApps)
+                        .help("Include open apps alongside pinned items.")
+                    Toggle("Show Trash", isOn: $state.customDock.showTrash)
+                }
 
                 // Rearranging a mirrored app takes the list over, which is
                 // right, but nothing used to give it back: one drag and the
@@ -435,9 +458,6 @@ struct SettingsView: View {
                     }
                     .help("The shelf is holding its own copy, taken when you first rearranged one. This hands the list back, and drops the copies so nothing appears twice.")
                 }
-                Toggle("Magnification", isOn: $state.customDock.magnification)
-                    .disabled(state.customDock.followSystemDock)
-                    .help("Grow icons under the pointer.")
             }
 
             itemList

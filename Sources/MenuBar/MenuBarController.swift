@@ -68,7 +68,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         addProfileSection(to: menu, kind: .macOSDock, title: "macOS Dock")
 
         menu.addItem(.separator())
-        menu.addItem(item("Capture Current Dock…", #selector(captureDock)))
         if app.state.originalMacOSDock != nil {
             menu.addItem(item("Restore Original Dock", #selector(restoreDock)))
         }
@@ -134,13 +133,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         onShelfSettingsChanged?()
         if profile.kind == .macOSDock {
             Task { await app.applyMacOSProfile() }
-        }
-    }
-
-    @objc private func captureDock() {
-        Task {
-            await app.captureCurrentDock(named: "Current Dock")
-            refreshButton()
         }
     }
 
