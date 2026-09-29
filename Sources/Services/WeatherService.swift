@@ -16,6 +16,13 @@ struct WeatherHour: Sendable {
     var date: Date
     var temperatureC: Double
     var symbolName: String
+    /// Millimetres expected in this hour.
+    ///
+    /// The same request already carried it and nothing read it. Temperature
+    /// across five hours is usually five near-identical numbers, which is a
+    /// strip that costs width and says nothing; rain is the thing that
+    /// actually changes and the thing anyone is looking for.
+    var precipitationMM: Double = 0
 }
 
 /// Forecast for one city, from MET Norway's Locationforecast 2.0.
@@ -136,7 +143,9 @@ final class WeatherService {
                 guard let celsius = entry.data.instant.details.airTemperature,
                       let code = entry.data.symbolCode else { return nil }
                 return WeatherHour(date: entry.time, temperatureC: celsius,
-                                   symbolName: Self.symbol(for: code))
+                                   symbolName: Self.symbol(for: code),
+                                   precipitationMM: entry.data.next1Hours?
+                                       .details?.precipitationAmount ?? 0)
             }
     }
 
@@ -226,7 +235,11 @@ private struct Forecast: Decodable {
         }
         struct Period: Decodable {
             struct Summary: Decodable { var symbolCode: String }
+            struct Details: Decodable { var precipitationAmount: Double? }
             var summary: Summary
+            /// Absent on the far end of the series, where MET publishes a
+            /// summary without the numbers behind it.
+            var details: Details?
         }
         var instant: Instant
         /// The last few days of the series only carry the 6-hour bucket.
