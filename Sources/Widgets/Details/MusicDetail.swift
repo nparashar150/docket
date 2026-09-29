@@ -235,22 +235,22 @@ struct MusicDetail: View {
     @ViewBuilder
     private func transport(_ track: Playing) -> some View {
         if track.isBrowser {
-            button(track.isPlaying ? "pause.fill" : "play.fill", 28) { toggle(track) }
+            // One control, so it had better look deliberate. A lone glyph
+            // under the scrubber reads as something left unfinished.
+            play(track.isPlaying) { toggle(track) }
         } else {
             let step = max(1, config.int("skip", default: 15))
-            HStack(spacing: 24) {
+            HStack(spacing: 14) {
                 if config.bool("backward") {
-                    button(skipSymbol("gobackward", step), 17) {
+                    secondary(skipSymbol("gobackward", step), 15) {
                         MusicService.shared.skip(by: -Double(step))
                     }
                 }
-                button("backward.end.fill", 19) { MusicService.shared.previous() }
-                button(track.isPlaying ? "pause.fill" : "play.fill", 28) {
-                    MusicService.shared.playPause()
-                }
-                button("forward.end.fill", 19) { MusicService.shared.next() }
+                secondary("backward.end.fill", 17) { MusicService.shared.previous() }
+                play(track.isPlaying) { MusicService.shared.playPause() }
+                secondary("forward.end.fill", 17) { MusicService.shared.next() }
                 if config.bool("forward") {
-                    button(skipSymbol("goforward", step), 17) {
+                    secondary(skipSymbol("goforward", step), 15) {
                         MusicService.shared.skip(by: Double(step))
                     }
                 }
@@ -273,19 +273,33 @@ struct MusicDetail: View {
         return numbered.contains(seconds) ? "\(base).\(seconds)" : base
     }
 
-    private func button(_ symbol: String, _ size: CGFloat,
-                        action: @escaping () -> Void) -> some View {
+    /// The one you came for.
+    private func play(_ playing: Bool, action: @escaping () -> Void) -> some View {
         Button {
             guard !context.isPreview else { return }
             action()
         } label: {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: .medium))
-                .foregroundStyle(WidgetStyle.primary)
-                .frame(width: size * 1.5, height: size * 1.4)
-                .contentShape(Rectangle())
+            Image(systemName: playing ? "pause.fill" : "play.fill")
+                .font(.system(size: 21, weight: .semibold))
+                // Optical, not geometric: play.fill is a triangle whose mass
+                // sits left of its box, so centring the box leaves it looking
+                // shoved to one side inside a circle. Pause is symmetric and
+                // needs none.
+                .offset(x: playing ? 0 : 1.5)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TransportButton(primary: true, ink: ink))
+        .accessibilityLabel(playing ? "Pause" : "Play")
+    }
+
+    private func secondary(_ symbol: String, _ size: CGFloat,
+                           action: @escaping () -> Void) -> some View {
+        Button {
+            guard !context.isPreview else { return }
+            action()
+        } label: {
+            Image(systemName: symbol).font(.system(size: size, weight: .semibold))
+        }
+        .buttonStyle(TransportButton(primary: false, ink: ink))
     }
 
     // MARK: Empty states
@@ -340,5 +354,45 @@ struct MusicDetail: View {
         let names = sources.map(\.displayName)
         guard !names.isEmpty else { return "no sources" }
         return names.count == 1 ? names[0] : names.joined(separator: " or ")
+    }
+}
+
+/// Transport controls that answer a click and say which one is the point.
+///
+/// Every control used to be the same bare glyph at a different point size on
+/// `.plain`, which draws no pressed state at all: play and pause read as
+/// merely the largest of five rather than the one the panel is for, and
+/// nothing acknowledged being clicked. A filled disc for the primary and
+/// plain glyphs either side is the hierarchy Apple Music uses, and it is the
+/// same disc-deepens-and-shrinks response `TileGlyph` already gives the
+/// shelf, so the two surfaces answer a press the same way.
+///
+/// Ink is passed in rather than taken from `WidgetStyle`. When the panel is
+/// standing on a colour drawn from the artwork, its brightness is fixed by
+/// this app rather than by the system, so a semantic colour here would go
+/// dark in a forced-light appearance and disappear into it. The title and
+/// the scrubber were already pinned for that reason; these were missed.
+private struct TransportButton: ButtonStyle {
+    var primary: Bool
+    var ink: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
+        let side: CGFloat = primary ? 46 : 34
+        return configuration.label
+            // The secondaries sit back a little so the primary leads without
+            // having to be enormous.
+            .foregroundStyle(ink.opacity(primary ? 1 : (pressed ? 1 : 0.7)))
+            .frame(width: side, height: side)
+            .background {
+                if primary {
+                    Circle().fill(ink.opacity(pressed ? 0.26 : 0.14))
+                }
+            }
+            // Round, so the corners of the box do not swallow a click meant
+            // for the neighbour.
+            .contentShape(Circle())
+            .scaleEffect(pressed ? 0.92 : 1)
+            .animation(.snappy(duration: 0.14), value: pressed)
     }
 }
