@@ -355,6 +355,9 @@ struct DockShelfView: View {
         chrome.itemGap + (vertical ? iconGeometry.height : iconGeometry.width)
     }
 
+    /// Which item the pointer is over, when it is a widget.
+    @State private var hoveredID: UUID?
+
     private var pointer: CGFloat? {
         guard let cursor else { return nil }
         return vertical ? cursor.y : cursor.x
@@ -377,7 +380,13 @@ struct DockShelfView: View {
             shelf(solved)
         }
         .background { WindowReader { shelfWindow = $0 } }
-        .onChange(of: hoverTarget(solved)) { _, new in applyHoverLabel(new) }
+        .onChange(of: hoverTarget(solved)) { _, new in
+            applyHoverLabel(new)
+            // Written here rather than read during body, where a state write
+            // is not allowed, which is the same reason `centre` is carried on
+            // the target itself.
+            hoveredID = new?.id
+        }
         .onDisappear { TooltipWindow.shared.hide() }
         .onAppear { measureScreen() }
         .onReceive(NotificationCenter.default.publisher(
@@ -723,6 +732,9 @@ struct DockShelfView: View {
                            isRunning: isRunning(entry.item),
                            now: app.now) { menu(for: entry) }
             .equatable()
+            // Only widgets read this. An icon already answers the pointer by
+            // magnifying, and a second affordance on top would be noise.
+            .environment(\.widgetHovered, entry.item.isWidget && hoveredID == entry.id)
             // The frame grows along the shelf only. That is what Apple's Dock
             // does: the plate gets longer so neighbours are pushed aside, but
             // its thickness never changes and icons simply grow out of it.
@@ -908,6 +920,8 @@ struct DockShelfView: View {
         /// Carried here rather than written to state: `hoverTarget` is
         /// evaluated during body, where a state write is not allowed.
         var centre: CGPoint
+        /// Which item this is, so a widget under the pointer can be told.
+        var id: UUID
     }
 
     /// How far the shelf sits inside its own panel, along the long axis.
@@ -984,7 +998,7 @@ struct DockShelfView: View {
         }
         let centre = CGPoint(x: along, y: crossCentre)
         return HoverTarget(text: entry.item.isWidget ? nil : entry.label,
-                           along: along, cross: cross, centre: centre)
+                           along: along, cross: cross, centre: centre, id: entry.id)
     }
 
     private func applyHoverLabel(_ target: HoverTarget?) {

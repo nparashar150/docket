@@ -36,7 +36,9 @@ struct MusicDetail: View {
     private var playing: Playing? {
         guard !context.isPreview else { return nil }
         let native = MusicService.shared.nowPlaying.map(Playing.init(native:))
-        let browser = browsersEnabled ? BrowserMedia.shared.track.map(Playing.init(browser:)) : nil
+        let browser = browsersEnabled
+            ? BrowserMedia.shared.track.map { Playing(browser: $0, artwork: BrowserMedia.shared.artwork) }
+            : nil
         if native?.isPlaying == true { return native }
         if browser?.isPlaying == true { return browser }
         return native ?? browser

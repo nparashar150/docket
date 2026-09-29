@@ -45,9 +45,13 @@ public enum BrowserApp: String, CaseIterable, Sendable {
 
 /// A video or audio element playing in a browser tab.
 ///
-/// No artwork field: `mediaSession` artwork is absent on the sites that
-/// matter here (YouTube, Netflix, Twitch all leave it empty for video), so the
-/// tile's placeholder is the honest rendering.
+/// This used to say `mediaSession` artwork is absent on the sites that matter
+/// and that the placeholder was therefore the honest rendering. The probe
+/// never asked for artwork, so that was an assumption rather than a finding:
+/// the same metadata object that yields a clean title and artist carries an
+/// `artwork` array, and the sites named as populating one populate the other.
+/// Asked for now. Absent is still handled, because a site that sets no
+/// artwork is a real case rather than a wrong guess.
 public struct BrowserTrack: Sendable, Equatable {
     public var title: String
     /// The `mediaSession` artist, falling back to the host name.
@@ -56,6 +60,12 @@ public struct BrowserTrack: Sendable, Equatable {
     public var elapsed: TimeInterval
     public var duration: TimeInterval
     public var browser: BrowserApp
+    /// Largest `mediaSession` artwork the page offers, if any.
+    ///
+    /// The URL rather than the image: this struct crosses back from a
+    /// serial queue on every poll, and downloading inside that would stall
+    /// the poll and refetch the same picture eight times a second.
+    public var artworkURL: URL?
 
     /// 0…1, never NaN - a live stream reports no duration.
     public var progress: Double {
@@ -83,6 +93,13 @@ public final class BrowserMedia {
     /// Last good reading. A failed poll leaves it alone rather than blanking
     /// the tile whenever a script times out.
     public private(set) var track: BrowserTrack?
+
+    /// The cover for `track`, once it has arrived.
+    ///
+    /// Separate from the track because the track is replaced on every poll,
+    /// eight times a second at the shelf's rate, while the picture behind it
+    /// changes only when the video does.
+    public private(set) var artwork: NSImage?
     /// A browser has media tabs open but will not run our JavaScript.
     public private(set) var needsSetup = false
     /// Menu path for the browser behind `needsSetup`; empty when it is false.
@@ -221,6 +238,35 @@ public final class BrowserMedia {
         track = nil
     }
 
+    /// Downloads the cover, at most once per URL.
+    ///
+    /// Guarded on the URL rather than on the track: a poll that finds the
+    /// same video again must not refetch, and the shelf polls while the
+    /// panel is open. A failure leaves `artwork` nil and is not retried for
+    /// that URL, because the fallback is already a reasonable picture and a
+    /// retry loop against someone's CDN is not worth a decoration.
+    private func adoptArtwork(_ url: URL?) {
+        guard url != artworkURL else { return }
+        artworkURL = url
+        artwork = nil
+        guard let url else { return }
+        Task { [weak self] in
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 6
+            // Decorative, so a stale one from the cache is preferable to
+            // spending a request on it.
+            request.cachePolicy = .returnCacheDataElseLoad
+            guard let (data, response) = try? await URLSession.shared.data(for: request),
+                  (response as? HTTPURLResponse)?.statusCode == 200,
+                  let image = NSImage(data: data)
+            else { return }
+            guard let self, artworkURL == url else { return }
+            artwork = image
+        }
+    }
+
+    @ObservationIgnored private var artworkURL: URL?
+
     private func apply(_ poll: BrowserBridge.Poll) {
         defer { polling = false }
         needsPermission = poll.denied
@@ -228,6 +274,7 @@ public final class BrowserMedia {
 
         if let found = poll.track {
             track = found
+            adoptArtwork(found.artworkURL)
             needsSetup = false
             setupHint = ""
             // The handle is kept even while paused: it is the only way to
@@ -485,7 +532,13 @@ enum BrowserBridge {
                 isPlaying: (object["p"] as? Bool) == false,
                 elapsed: duration > 0 ? min(elapsed, duration) : elapsed,
                 duration: duration,
-                browser: browser
+                browser: browser,
+                artworkURL: (object["w"] as? String).flatMap {
+                    // http is refused on purpose. The picture is decorative
+                    // and not worth a cleartext request.
+                    let url = URL(string: $0)
+                    return url?.scheme == "https" ? url : nil
+                }
             )
             // See MediaReading: the page side already drops elements with
             // neither a duration nor a position, but a title can arrive with
@@ -496,6 +549,7 @@ enum BrowserBridge {
             return .track(track, url: object["u"] as? String ?? tab.url)
         }
     }
+
 
     /// Document titles carry a notification count and a site suffix that the
     /// tile has no room for. `mediaSession` titles have neither, so this only
@@ -594,11 +648,12 @@ private enum Script {
     /// Returns a JSON *string*: Chromium's coercion of a JavaScript object
     /// into an Apple Event record is unreliable, a string is not.
     static let probe = """
-    (function(){\(finder)if(!o.length)return '';var v=o[0],\
+    (function(){\(finder)if(!o.length)return '';var v=o[0],w,\
     m=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;\
+    w=(m&&m.artwork&&m.artwork.length)?m.artwork[m.artwork.length-1].src:'';\
     return JSON.stringify({t:m&&m.title?m.title:document.title,\
     a:m&&m.artist?m.artist:location.hostname,p:v.paused,c:v.currentTime,\
-    d:isFinite(v.duration)?v.duration:0,u:location.href})})()
+    d:isFinite(v.duration)?v.duration:0,u:location.href,w:w})})()
     """
 
     static let toggle = """

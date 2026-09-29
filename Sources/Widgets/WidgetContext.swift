@@ -78,6 +78,7 @@ public struct WidgetSurface<Content: View>: View {
     @ViewBuilder public var content: Content
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.widgetHovered) private var hovered
 
     /// A card is a *recess* in the plate, not something raised on top of it.
     ///
@@ -107,12 +108,53 @@ public struct WidgetSurface<Content: View>: View {
             .background {
                 RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous)
                     .fill(fill ?? cardFill)
+                    // Lifted a little out of the recess under the pointer.
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous)
+                            .fill(.white.opacity(hovered ? (scheme == .dark ? 0.07 : 0.22) : 0))
+                    }
             }
             .overlay {
                 RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous)
-                    .strokeBorder(cardEdge, lineWidth: 1)
+                    .strokeBorder(hovered ? hoverEdge : cardEdge, lineWidth: 1)
             }
             .clipShape(RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous))
+            // A transform rather than a layout change, and small.
+            //
+            // Widgets deliberately do not magnify: a 264pt card swelling the
+            // 30% an icon does would displace a quarter of the shelf, so
+            // brushing past one would shove every icon aside. But answering
+            // nothing at all is what made them feel dead beside the icons.
+            // scaleEffect draws bigger without asking for more room, and 2%
+            // stays inside the gap between cards.
+            .scaleEffect(hovered ? 1.02 : 1)
+            .animation(.smooth(duration: 0.16), value: hovered)
+    }
+
+    /// The edge catches the light too, or the card reads as merely paler.
+    private var hoverEdge: Color {
+        scheme == .dark ? .white.opacity(0.16) : .black.opacity(0.12)
+    }
+}
+
+/// Whether the pointer is over this widget.
+///
+/// Through the environment rather than `WidgetContext` so that every widget
+/// gains the highlight without being edited, and because `WidgetSurface` is
+/// the one place that draws a card: putting it there means one definition of
+/// what hover looks like instead of twenty.
+///
+/// Not `.onHover`, which never fires in a non-activating accessory panel.
+/// The shelf already tracks the pointer for magnification and already
+/// hit-tests it to place a tooltip; this rides on the same answer.
+public struct WidgetHoveredKey: EnvironmentKey {
+    public static let defaultValue = false
+}
+
+public extension EnvironmentValues {
+    var widgetHovered: Bool {
+        get { self[WidgetHoveredKey.self] }
+        set { self[WidgetHoveredKey.self] = newValue }
     }
 }
 

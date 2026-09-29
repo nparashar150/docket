@@ -46,7 +46,9 @@ struct MusicTile: View {
     private var playing: Playing? {
         if context.isPreview { return Self.sample }
         let native = MusicService.shared.nowPlaying.map(Playing.init(native:))
-        let browser = browsersEnabled ? BrowserMedia.shared.track.map(Playing.init(browser:)) : nil
+        let browser = browsersEnabled
+            ? BrowserMedia.shared.track.map { Playing(browser: $0, artwork: BrowserMedia.shared.artwork) }
+            : nil
         if native?.isPlaying == true { return native }
         if browser?.isPlaying == true { return browser }
         return native ?? browser
@@ -405,16 +407,16 @@ struct Playing {
         sourceBundleID = native.source.bundleID
     }
 
-    /// No artwork: browser video has none to fetch, and the tile's placeholder
-    /// is the right answer rather than a gap.
-    init(browser: BrowserTrack) {
+    /// Artwork comes from `BrowserMedia`, which fetches it once per video
+    /// rather than once per poll, so it is passed in rather than read here.
+    init(browser: BrowserTrack, artwork: NSImage?) {
         title = browser.title
         artist = browser.site
         isPlaying = browser.isPlaying
         elapsed = browser.elapsed
         duration = browser.duration
         progress = browser.progress
-        artwork = nil
+        self.artwork = artwork
         isBrowser = true
         sourceBundleID = browser.browser.bundleID
     }
