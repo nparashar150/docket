@@ -110,7 +110,14 @@ struct WeatherTile: View {
         if hours.isEmpty {
             wide(caption: placeCaption, size: 14, lines: 1)
         } else {
-            let shown = Array(hours.prefix(5))
+            // Four ahead, not five, because the first cell is now.
+            //
+            // The series is filtered to times after the present, so this
+            // strip showed five future hours and not the temperature
+            // outside, which is the number anybody looking at a weather
+            // widget wants first. Leading with it costs one forecast hour,
+            // which is the cheapest thing on the row.
+            let shown = Array(hours.prefix(4))
             // Only when there is something to say. A dry afternoon would
             // otherwise get five empty gutters, which is chrome pretending to
             // be data and costs the strip height it needs for the figures.
@@ -121,6 +128,27 @@ struct WeatherTile: View {
             // hours against each other.
             let peak = max(0.2, shown.map(\.precipitationMM).max() ?? 0)
             HStack(spacing: 0) {
+                if let weather {
+                    VStack(spacing: 1) {
+                        Text("Now")
+                            .font(WidgetStyle.caption(10))
+                            .foregroundStyle(WidgetStyle.primary)
+                            .monospacedDigit()
+                        Image(systemName: weather.symbolName)
+                            .symbolRenderingMode(.multicolor)
+                            .font(.system(size: 15))
+                        Text(degrees(weather.temperatureC))
+                            .font(WidgetStyle.label(12))
+                            .foregroundStyle(WidgetStyle.primary)
+                            .monospacedDigit()
+                        // An empty gutter rather than none, so the row of
+                        // figures keeps one baseline when the rest are wet.
+                        if wet { rain(0, peak: peak) }
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
+                }
                 ForEach(shown, id: \.date) { hour in
                     VStack(spacing: 1) {
                         Text(hour.date.formatted(.dateTime.hour()))
