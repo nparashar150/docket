@@ -1,8 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// Now Playing at length: the artwork at a size worth looking at, the track,
-/// a scrubber you can actually drag, and the transport in full.
+/// Now Playing at length: the artwork as the whole card, the transport in
+/// its middle, and the track and a scrubber you can drag along its foot.
+///
+/// It used to stack them: artwork, then title, then scrubber, then controls,
+/// which spent most of the panel on the gaps between four rows and left the
+/// picture a small square in the middle of it. The card is the picture now,
+/// dimmed where text sits on it, the way the system's own player does it.
 ///
 /// The tile is width-starved - 264pt carrying artwork, two lines of text, a
 /// scrubber and buttons - so it hides controls and shrinks the art. None of
@@ -49,7 +54,7 @@ struct MusicDetail: View {
         let browser = browsersEnabled
             ? BrowserMedia.shared.track.map {
                 Playing(browser: $0, artwork: BrowserMedia.shared.artwork,
-                        tint: BrowserMedia.shared.tint)
+                        icon: BrowserMedia.shared.siteIcon, tint: BrowserMedia.shared.tint)
             }
             : nil
         if native?.isPlaying == true { return native }
@@ -64,20 +69,9 @@ struct MusicDetail: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            artwork(playing?.artwork)
+        Group {
             if let track = playing {
-                titles(track)
-                // A video with no readable duration would draw two 0:00 clocks
-                // around a bar that can never move, so it gets none.
-                if track.duration > 0 || !track.isBrowser { scrubber(track) }
-                // Browser playback has nothing to skip to, so its transport is
-                // a single button, and a row of its own for one control spent
-                // about eighty points of a four hundred point panel on empty
-                // space either side of it. It rides with the scrubber instead,
-                // which is where a compact player puts it. A native player
-                // has five controls and genuinely needs the row.
-                if !track.isBrowser { transport(track) }
+                card(track)
             } else if needsPermission {
                 connect
             } else {
@@ -87,78 +81,109 @@ struct MusicDetail: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Ink, pinned to the ground when there is one.
-    ///
-    /// `WidgetStyle.primary` and `.secondary` follow the system appearance,
-    /// which is right on a vibrant plate and wrong on a ground whose
-    /// brightness this app fixed: in a forced-light appearance they would go
-    /// dark and disappear into it. The same reasoning StickyNoteDetail
-    /// already uses for its ink on fixed paper.
-    private var hasGround: Bool { playing?.tint != nil }
+    /// Everything on the card is on a picture or on the source's colour, both
+    /// darkened, so the ink is fixed white rather than following the system:
+    /// a semantic colour would go dark in a light appearance and disappear.
+    private let ink = Color.white
+    private let subInk = Color.white.opacity(0.75)
+    private let trackInk = Color.white.opacity(0.3)
 
-    private var ink: Color { hasGround ? .white : WidgetStyle.primary }
+    // MARK: Card
 
-    /// Opaque rather than `Color.secondary`, whose translucency caps its
-    /// contrast no matter what is behind it.
-    private var subInk: Color { hasGround ? Color(white: 0.8) : WidgetStyle.secondary }
+    /// How far the card reaches past the panel's padding: to 6pt from its
+    /// edge, where a 14pt corner sits concentric with the panel's 20.
+    private static let bleed: CGFloat = 10
+    private static let corner: CGFloat = 14
 
-    private var trackInk: Color {
-        hasGround ? .white.opacity(0.48) : WidgetStyle.secondary.opacity(0.3)
+    private func card(_ track: Playing) -> some View {
+        let icon = track.icon ?? AppCatalog.shared.icon(forBundleID: track.sourceBundleID)
+        return ZStack {
+            backdrop(track.artwork, tint: track.tint)
+            scrim
+            VStack(spacing: 0) {
+                HStack {
+                    if let icon {
+                        // Whose it is: Netflix, Spotify, Music. Beside the
+                        // picture rather than instead of it.
+                        Image(nsImage: icon)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 22, height: 22)
+                            .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                    }
+                    Spacer()
+                }
+                Spacer(minLength: 8)
+                transport(track)
+                Spacer(minLength: 8)
+                titles(track)
+                // A video with no readable duration would draw two 0:00
+                // clocks around a bar that can never move, so it gets none.
+                if track.duration > 0 || !track.isBrowser {
+                    scrubber(track).padding(.top, 10)
+                }
+            }
+            .padding(14)
+        }
+        .frame(height: 250)
+        .clipShape(.rect(cornerRadius: Self.corner, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Self.corner, style: .continuous)
+                .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
+        }
+        .padding(-Self.bleed)
     }
 
-    // MARK: Artwork
+    /// The artwork filling the card, or with none, the colour the source's
+    /// icon gave, so a page with no picture still stands on its own brand.
+    @ViewBuilder
+    private func backdrop(_ image: NSImage?, tint: ArtworkTint?) -> some View {
+        if let image {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fill)
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                .clipped()
+                .accessibilityLabel("Artwork")
+        } else if let tint {
+            LinearGradient(colors: [Self.colour(tint.top), Self.colour(tint.bottom)],
+                           startPoint: .top, endPoint: .bottom)
+        } else {
+            LinearGradient(colors: [Color(white: 0.26), Color(white: 0.12)],
+                           startPoint: .top, endPoint: .bottom)
+        }
+    }
 
-    /// Clipped twice on purpose: the fill is rounded before the image is laid
-    /// over it, and `.fill` aspect ratio overflows the frame after it.
-    ///
-    /// Square only for square artwork. A cover is square and a video
-    /// thumbnail is 16:9, and cropping the second to the first threw away
-    /// 44% of its width from the middle outward, which is how a drag race
-    /// became a man standing in front of nothing. Wide artwork gets a wide
-    /// frame and is fitted into it instead.
-    private func artwork(_ image: NSImage?) -> some View {
-        let wide = (image?.size.width ?? 0) > (image?.size.height ?? 1) * 1.2
-        let side: CGFloat = 170
-        return RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(hasGround ? .black.opacity(0.22) : WidgetStyle.primary.opacity(0.08))
-            .overlay {
-                if let image {
-                    Image(nsImage: image)
-                        .resizable()
-                        // Fitted when the shape of the frame is the shape of
-                        // the picture, so nothing is thrown away.
-                        .aspectRatio(contentMode: wide ? .fit : .fill)
-                } else {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 52, weight: .medium))
-                        .foregroundStyle(hasGround ? .white.opacity(0.35)
-                                                   : WidgetStyle.primary.opacity(0.3))
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .frame(width: wide ? 298 : side, height: wide ? 168 : side)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            // Only with a ground, and black rather than tinted: a shadow in
-            // the ground's own hue on the ground itself is invisible.
-            .shadow(color: hasGround ? .black.opacity(0.45) : .clear, radius: 22, y: 10)
-            .overlay {
-                if hasGround {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
-                }
-            }
-            .accessibilityLabel("Artwork")
+    /// Dark enough under the controls to read on any picture, darker still
+    /// under the title and scrubber, and light at the top so the picture is
+    /// still the picture.
+    private var scrim: some View {
+        ZStack {
+            Color.black.opacity(0.22)
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.25), location: 0),
+                .init(color: .clear, location: 0.3),
+                .init(color: .clear, location: 0.45),
+                .init(color: .black.opacity(0.75), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+        }
+    }
+
+    private static func colour(_ rgb: (red: Double, green: Double, blue: Double)) -> Color {
+        Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 
     // MARK: Track
 
     private func titles(_ track: Playing) -> some View {
-        VStack(spacing: 2) {
+        VStack(alignment: .leading, spacing: 1) {
             Text(track.title)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(ink)
             Text(track.artist)
-                .font(WidgetStyle.caption(13))
+                .font(WidgetStyle.caption(12))
                 .foregroundStyle(subInk)
         }
         // Truncated, never wrapped: the panel is sized once when it opens, so
@@ -166,7 +191,8 @@ struct MusicDetail: View {
         // rather than given room.
         .lineLimit(1)
         .truncationMode(.tail)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
     }
 
     // MARK: Scrubber
@@ -174,13 +200,6 @@ struct MusicDetail: View {
     private func scrubber(_ track: Playing) -> some View {
         let ratio = scrubbing ?? track.progress
         return HStack(spacing: 9) {
-            if track.isBrowser {
-                play(track.isPlaying, compact: true) { toggle(track) }
-                    // Pulled back toward the times: the disc carries its own
-                    // margin and the row's spacing on top of it reads as a
-                    // gap rather than as a group.
-                    .padding(.trailing, -3)
-            }
             time(MusicTime.clock(scrubbing.map { $0 * track.duration } ?? track.elapsed),
                  alignment: .leading)
             GeometryReader { geo in
@@ -233,7 +252,7 @@ struct MusicDetail: View {
             .font(WidgetStyle.caption(12))
             .monospacedDigit()
             .rollingValue(text)
-            .foregroundStyle(WidgetStyle.secondary)
+            .foregroundStyle(subInk)
             .lineLimit(1)
             .fixedSize()
             .frame(minWidth: 34, alignment: alignment)
@@ -268,7 +287,6 @@ struct MusicDetail: View {
                     }
                 }
             }
-            .padding(.top, 2)
         }
     }
 

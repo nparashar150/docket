@@ -66,6 +66,13 @@ public struct BrowserTrack: Sendable, Equatable {
     /// serial queue on every poll, and downloading inside that would stall
     /// the poll and refetch the same picture eight times a second.
     public var artworkURL: URL?
+    /// The site's own largest icon: the picture of last resort, which every
+    /// site has even when it offers nothing else.
+    public var iconURL: URL?
+    /// Whether the page published `mediaSession` metadata. Without it the
+    /// title is `document.title` and the artist is the host name, so a
+    /// better name from the public page is worth taking.
+    public var hasSession = true
 
     /// 0…1, never NaN - a live stream reports no duration.
     public var progress: Double {
@@ -101,8 +108,16 @@ public final class BrowserMedia {
     /// changes only when the video does.
     public private(set) var artwork: NSImage?
 
-    /// The colour the panel stands on, from the same bytes.
-    public private(set) var tint: ArtworkTint?
+    /// The colour the panel stands on: the artwork's, else the site icon's,
+    /// so a page with no picture still stands on its own brand.
+    public var tint: ArtworkTint? { artworkTint ?? iconTint }
+    private var artworkTint: ArtworkTint?
+
+    /// The site's own icon, drawn where artwork would be when there is none.
+    /// Every site has one, which is what retires the music note for browser
+    /// playback: the worst case is the site's mark rather than a stand-in.
+    public private(set) var siteIcon: NSImage?
+    private var iconTint: ArtworkTint?
     /// A browser has media tabs open but will not run our JavaScript.
     public private(set) var needsSetup = false
     /// Menu path for the browser behind `needsSetup`; empty when it is false.
@@ -291,29 +306,116 @@ public final class BrowserMedia {
         guard url != artworkURL else { return }
         artworkURL = url
         artwork = nil
-        tint = nil
+        artworkTint = nil
         guard let url else { return }
         Task { [weak self] in
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 6
-            // Decorative, so a stale one from the cache is preferable to
-            // spending a request on it.
-            request.cachePolicy = .returnCacheDataElseLoad
-            guard let (data, response) = try? await URLSession.shared.data(for: request),
-                  (response as? HTTPURLResponse)?.statusCode == 200,
-                  let image = NSImage(data: data)
-            else { return }
-            // Detached on purpose: this Task body inherits main isolation
-            // from the actor it was started on, and a 16x16 decode plus a
-            // histogram is not main-thread work.
-            let tint = await ArtworkTint.extracted(from: data)
-            guard let self, artworkURL == url else { return }
+            guard let (image, tint) = await Self.picture(at: url),
+                  let self, artworkURL == url else { return }
             artwork = image
-            self.tint = tint
+            artworkTint = tint
         }
     }
 
+    /// The same, for the site's icon.
+    private func adoptIcon(_ url: URL?) {
+        guard url != iconURL else { return }
+        iconURL = url
+        siteIcon = nil
+        iconTint = nil
+        guard let url else { return }
+        Task { [weak self] in
+            guard let (image, tint) = await Self.picture(at: url),
+                  let self, iconURL == url else { return }
+            siteIcon = image
+            iconTint = tint
+        }
+    }
+
+    /// A picture and the colour drawn from it, or nil.
+    private static func picture(at url: URL) async -> (NSImage, ArtworkTint?)? {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 6
+        // Decorative, so a stale one from the cache is preferable to
+        // spending a request on it.
+        request.cachePolicy = .returnCacheDataElseLoad
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              // A video still arrives as a data URL, which has no status.
+              (response as? HTTPURLResponse).map({ $0.statusCode == 200 }) ?? true,
+              let image = NSImage(data: data)
+        else { return nil }
+        // Detached inside: a 16x16 decode plus a histogram is not main-thread
+        // work.
+        return (image, await ArtworkTint.extracted(from: data))
+    }
+
     @ObservationIgnored private var artworkURL: URL?
+    @ObservationIgnored private var iconURL: URL?
+
+    /// The page last looked into for what it left out, and what was found.
+    @ObservationIgnored private var fallbackPage: String?
+    @ObservationIgnored private var preview: PagePreview?
+    @ObservationIgnored private var still: URL?
+
+    /// Fills in what the playing page left out, from the first source that
+    /// has it: the public copy of the page for a name and picture (see
+    /// PagePreview), then a still of the video itself. The icon, drawn when
+    /// all of that comes up empty, is `adoptIcon`'s.
+    ///
+    /// Each is asked for once per page, and only when needed: a page with a
+    /// session and artwork, which is most of them, costs nothing here.
+    private func fillIn(_ track: inout BrowserTrack, tab: BrowserBridge.TabRef?) {
+        guard let tab else { return }
+        if tab.url != fallbackPage {
+            fallbackPage = tab.url
+            preview = nil
+            still = nil
+            if !track.hasSession || track.artworkURL == nil {
+                lookUp(tab, wantsPicture: track.artworkURL == nil)
+            }
+        }
+        // A name only replaces `document.title` and the host name, never a
+        // name the page published itself.
+        if let preview, !track.hasSession {
+            track.title = preview.name
+            track.site = preview.site ?? track.site.replacingOccurrences(of: "www.", with: "")
+        }
+        if track.artworkURL == nil { track.artworkURL = preview?.image ?? still }
+    }
+
+    private func lookUp(_ tab: BrowserBridge.TabRef, wantsPicture: Bool) {
+        let page = tab.url
+        Task { [weak self] in
+            if let found = await Self.preview(of: page) {
+                guard let self, fallbackPage == page else { return }
+                preview = found
+                if found.image != nil { return }
+            }
+            guard wantsPicture else { return }
+            let frame = await BrowserBridge.frame(tab, browser: tab.browser)
+            guard let self, fallbackPage == page else { return }
+            still = frame
+        }
+    }
+
+    /// The public page's preview, fetched without the browser's cookies.
+    ///
+    /// Signed out, some players bounce to a sign-in page whose preview
+    /// describes signing in, so a request that lands on one is discarded
+    /// rather than titled "Sign In".
+    private static func preview(of page: String) async -> PagePreview? {
+        guard let address = PagePreview.address(for: page) else { return nil }
+        var request = URLRequest(url: address)
+        request.timeoutInterval = 6
+        request.cachePolicy = .returnCacheDataElseLoad
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              !["login", "signin", "sign-in", "sign_in", "auth"].contains(where: {
+                  (response.url?.path().lowercased() ?? "").contains($0) }),
+              let html = String(data: data, encoding: .utf8)
+        else { return nil }
+        // A few hundred kilobytes of page, so not on main.
+        return await Task.detached { PagePreview.parse(html) }.value
+    }
 
     private func apply(_ poll: BrowserBridge.Poll) {
         defer { polling = false }
@@ -340,8 +442,10 @@ public final class BrowserMedia {
                     found.isPlaying = asked
                 }
             }
+            fillIn(&found, tab: poll.tab)
             track = found
             adoptArtwork(found.artworkURL)
+            adoptIcon(found.iconURL)
             needsSetup = false
             setupHint = ""
             // The handle is kept even while paused: it is the only way to
@@ -516,12 +620,28 @@ enum BrowserBridge {
 
     /// How many candidate tabs a rescan is willing to poke. Listing every tab
     /// is one Apple Event and free; each probe is its own round trip.
-    private static let probeLimit = 5
+    private static let probeLimit = 8
 
     static func toggle(_ tab: TabRef, browser: BrowserApp) async {
         await offMain {
             guard isRunning(browser) else { return }
             _ = run(javascript: Script.toggle, in: tab, browser: browser)
+        }
+    }
+
+    /// A still from the playing video, as a JPEG data URL, or nil.
+    ///
+    /// Nil for DRM video, which every browser draws black or refuses, and
+    /// for cross-origin video, which taints the canvas. Asked once per page
+    /// and only when the page offers no picture, since the answer is tens of
+    /// kilobytes over an Apple Event.
+    static func frame(_ tab: TabRef, browser: BrowserApp) async -> URL? {
+        await offMain {
+            guard isRunning(browser),
+                  case .value(let descriptor) = run(javascript: Script.frame, in: tab, browser: browser),
+                  let text = descriptor.stringValue, text.hasPrefix("data:image/")
+            else { return nil }
+            return URL(string: text)
         }
     }
 
@@ -541,8 +661,11 @@ enum BrowserBridge {
 
     // MARK: Tab discovery
 
-    /// URLs worth probing. Deliberately short: a miss costs one extra Apple
-    /// Event, and the JavaScript probe is what actually decides.
+    /// Hosts probed first. A priority, no longer a gate: gating on a list
+    /// meant every streamer not on it, Apple TV and Max among them, was never
+    /// looked at. Only the front tab of each window is listed, so probing the
+    /// rest costs a few Apple Events every rescan, and the JavaScript probe
+    /// is what decides.
     private static let mediaHosts = [
         "youtube.com/watch", "youtube.com/shorts", "youtube.com/live",
         "music.youtube.com", "netflix.com/watch", "twitch.tv/", "vimeo.com/",
@@ -563,11 +686,12 @@ enum BrowserBridge {
             let fields = line.components(separatedBy: "\t")
             guard fields.count >= 3, let window = Int(fields[0]), let index = Int(fields[1])
             else { continue }
-            let url = fields[2].lowercased()
-            guard mediaHosts.contains(where: url.contains) else { continue }
+            // Nothing to play on a browser's own pages.
+            guard fields[2].hasPrefix("http") else { continue }
             found.append(TabRef(browser: browser, window: window, tab: index, url: fields[2]))
         }
-        return found
+        let known = { (tab: TabRef) in mediaHosts.contains(where: tab.url.lowercased().contains) }
+        return found.filter(known) + found.filter { !known($0) }
     }
 
     // MARK: Reading one tab
@@ -603,12 +727,11 @@ enum BrowserBridge {
                 elapsed: duration > 0 ? min(elapsed, duration) : elapsed,
                 duration: duration,
                 browser: browser,
-                artworkURL: (object["w"] as? String).flatMap {
-                    // http is refused on purpose. The picture is decorative
-                    // and not worth a cleartext request.
-                    let url = URL(string: $0)
-                    return url?.scheme == "https" ? url : nil
-                }
+                // http is refused on purpose. The picture is decorative and
+                // not worth a cleartext request.
+                artworkURL: (object["w"] as? String).flatMap(secure),
+                iconURL: (object["i"] as? String).flatMap(secure),
+                hasSession: object["s"] as? Bool ?? true
             )
             // See MediaReading: the page side already drops elements with
             // neither a duration nor a position, but a title can arrive with
@@ -620,6 +743,11 @@ enum BrowserBridge {
         }
     }
 
+
+    private static func secure(_ address: String) -> URL? {
+        let url = URL(string: address)
+        return url?.scheme == "https" ? url : nil
+    }
 
     /// Document titles carry a notification count and a site suffix that the
     /// tile has no room for. `mediaSession` titles have neither, so this only
@@ -708,22 +836,51 @@ private enum Script {
     catch(e){}}g(document);try{document.querySelectorAll('iframe').forEach(function(f){\
     try{if(f.contentDocument)g(f.contentDocument)}catch(e){}})}catch(e){}\
     o=o.filter(function(v){return v.duration>0||v.currentTime>0});\
+    if(!(navigator.mediaSession&&navigator.mediaSession.metadata))\
+    o=o.filter(function(v){return !v.muted&&(!v.paused||v.currentTime>0)});\
     o.sort(function(a,b){return (a.paused-b.paused)||(b.duration-a.duration)});
     """
 
-    /// `mediaSession.metadata` first - YouTube, Netflix, Spotify Web,
-    /// SoundCloud and Twitch all populate it and it yields a clean title and
-    /// artist. `document.title` is the dirty fallback.
+    /// `mediaSession.metadata` first - YouTube, Spotify Web, SoundCloud and
+    /// Twitch populate it and it yields a clean title and artist.
+    /// `document.title` is the dirty fallback. Netflix, measured, does not;
+    /// see PagePreview.
     ///
-    /// Returns a JSON *string*: Chromium's coercion of a JavaScript object
-    /// into an Apple Event record is unreliable, a string is not.
+    /// Artwork falls back to the video's poster, then the page's `og:image`
+    /// or `twitter:image`, for sites that set a picture but no session. The
+    /// icon is the largest the page links, for when there is no picture at
+    /// all. On a page with no session, an element only counts if it is
+    /// audible and has been played: without the host list gating which pages
+    /// are probed, a muted hero loop or a promo video nobody started would
+    /// otherwise read as something playing.
     static let probe = """
-    (function(){\(finder)if(!o.length)return '';var v=o[0],w,\
+    (function(){\(finder)if(!o.length)return '';var v=o[0],w,i='',n=-1,\
     m=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;\
-    w=(m&&m.artwork&&m.artwork.length)?m.artwork[m.artwork.length-1].src:'';\
+    function mt(k){var e=[].find.call(document.getElementsByTagName('meta'),function(e){\
+    return e.getAttribute('property')==k||e.getAttribute('name')==k});return e?e.content:''}\
+    w=(m&&m.artwork&&m.artwork.length)?m.artwork[m.artwork.length-1].src:\
+    (v.poster||mt('og:image')||mt('twitter:image'));\
+    [].forEach.call(document.getElementsByTagName('link'),function(l){\
+    var r=(l.rel||'').toLowerCase();if(r.indexOf('icon')<0||r.indexOf('mask')>=0)return;\
+    var z=parseInt((l.getAttribute('sizes')||'').split('x')[0])||(r.indexOf('apple')>=0?180:16);\
+    if(z>n){n=z;i=l.href}});\
     return JSON.stringify({t:m&&m.title?m.title:document.title,\
     a:m&&m.artist?m.artist:location.hostname,p:v.paused,c:v.currentTime,\
-    d:isFinite(v.duration)?v.duration:0,u:location.href,w:w})})()
+    d:isFinite(v.duration)?v.duration:0,u:location.href,w:w,s:!!m,\
+    i:i||location.origin+'/favicon.ico'})})()
+    """
+
+    /// A 320pt-wide JPEG of the current frame, or '' when it would be black
+    /// (DRM draws black) or the canvas refuses (cross-origin, DRM in Safari).
+    /// Black is judged on a sparse sample, which is plenty to tell a picture
+    /// from nothing.
+    static let frame = """
+    (function(){\(finder)if(!o.length)return '';var v=o[0];try{\
+    var c=document.createElement('canvas'),x=c.getContext('2d');c.width=320;\
+    c.height=Math.round(320*v.videoHeight/v.videoWidth)||180;\
+    x.drawImage(v,0,0,c.width,c.height);var d=x.getImageData(0,0,c.width,c.height).data,s=0,k=0;\
+    for(var j=0;j<d.length;j+=400){s+=d[j]+d[j+1]+d[j+2];k++}\
+    if(s/k<30)return '';return c.toDataURL('image/jpeg',0.8)}catch(e){return ''}})()
     """
 
     static let toggle = """

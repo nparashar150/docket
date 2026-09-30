@@ -51,7 +51,7 @@ struct MusicTile: View {
     /// installed, which leaves the generic note rather than a blank square.
     private func sourceIcon(_ track: Playing?) -> NSImage? {
         guard let track, !context.isPreview else { return nil }
-        return AppCatalog.shared.icon(forBundleID: track.sourceBundleID)
+        return track.icon ?? AppCatalog.shared.icon(forBundleID: track.sourceBundleID)
     }
 
     /// How often a playing track is re-read. The scrubber glides over exactly
@@ -68,7 +68,7 @@ struct MusicTile: View {
         let browser = browsersEnabled
             ? BrowserMedia.shared.track.map {
                 Playing(browser: $0, artwork: BrowserMedia.shared.artwork,
-                        tint: BrowserMedia.shared.tint)
+                        icon: BrowserMedia.shared.siteIcon, tint: BrowserMedia.shared.tint)
             }
             : nil
         if native?.isPlaying == true { return native }
@@ -419,6 +419,10 @@ struct Playing {
     /// it.
     var sourceBundleID: String
 
+    /// A better icon than the source app's, when there is one: the site's
+    /// own, for browser playback. Netflix in Safari is Netflix, not Safari.
+    var icon: NSImage?
+
     /// The ground the detail panel stands on, when the artwork yielded one.
     var tint: ArtworkTint?
 
@@ -444,7 +448,7 @@ struct Playing {
 
     /// Artwork comes from `BrowserMedia`, which fetches it once per video
     /// rather than once per poll, so it is passed in rather than read here.
-    init(browser: BrowserTrack, artwork: NSImage?, tint: ArtworkTint?) {
+    init(browser: BrowserTrack, artwork: NSImage?, icon: NSImage?, tint: ArtworkTint?) {
         title = browser.title
         artist = browser.site
         isPlaying = browser.isPlaying
@@ -454,6 +458,7 @@ struct Playing {
         self.artwork = artwork
         isBrowser = true
         sourceBundleID = browser.browser.bundleID
+        self.icon = icon
         self.tint = tint
     }
 }
