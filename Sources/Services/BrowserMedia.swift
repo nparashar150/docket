@@ -45,9 +45,13 @@ public enum BrowserApp: String, CaseIterable, Sendable {
 
 /// A video or audio element playing in a browser tab.
 ///
-/// No artwork field: `mediaSession` artwork is absent on the sites that
-/// matter here (YouTube, Netflix, Twitch all leave it empty for video), so the
-/// tile's placeholder is the honest rendering.
+/// This used to say `mediaSession` artwork is absent on the sites that matter
+/// and that the placeholder was therefore the honest rendering. The probe
+/// never asked for artwork, so that was an assumption rather than a finding:
+/// the same metadata object that yields a clean title and artist carries an
+/// `artwork` array, and the sites named as populating one populate the other.
+/// Asked for now. Absent is still handled, because a site that sets no
+/// artwork is a real case rather than a wrong guess.
 public struct BrowserTrack: Sendable, Equatable {
     public var title: String
     /// The `mediaSession` artist, falling back to the host name.
@@ -56,6 +60,12 @@ public struct BrowserTrack: Sendable, Equatable {
     public var elapsed: TimeInterval
     public var duration: TimeInterval
     public var browser: BrowserApp
+    /// Largest `mediaSession` artwork the page offers, if any.
+    ///
+    /// The URL rather than the image: this struct crosses back from a
+    /// serial queue on every poll, and downloading inside that would stall
+    /// the poll and refetch the same picture eight times a second.
+    public var artworkURL: URL?
 
     /// 0…1, never NaN - a live stream reports no duration.
     public var progress: Double {
@@ -83,6 +93,16 @@ public final class BrowserMedia {
     /// Last good reading. A failed poll leaves it alone rather than blanking
     /// the tile whenever a script times out.
     public private(set) var track: BrowserTrack?
+
+    /// The cover for `track`, once it has arrived.
+    ///
+    /// Separate from the track because the track is replaced on every poll,
+    /// eight times a second at the shelf's rate, while the picture behind it
+    /// changes only when the video does.
+    public private(set) var artwork: NSImage?
+
+    /// The colour the panel stands on, from the same bytes.
+    public private(set) var tint: ArtworkTint?
     /// A browser has media tabs open but will not run our JavaScript.
     public private(set) var needsSetup = false
     /// Menu path for the browser behind `needsSetup`; empty when it is false.
@@ -109,6 +129,29 @@ public final class BrowserMedia {
     @ObservationIgnored private var lastProbe: Date = .distantPast
     /// Consecutive probes that ran out of time.
     @ObservationIgnored private var timeouts = 0
+
+    /// When we last spoke to the browser ourselves.
+    @ObservationIgnored private var lastCommand: Date = .distantPast
+
+    /// The play state the user asked for, until a reading confirms it.
+    @ObservationIgnored private var asked: Bool?
+
+    /// How long a reading is allowed to contradict what the user just asked
+    /// for before it is believed.
+    ///
+    /// Long enough for a command to reach the page and the next reading to
+    /// come back from it, short enough that a command which never landed
+    /// corrects itself while the finger is still near the button.
+    private static let commandHold: TimeInterval = 1.5
+
+    /// How long after one of our own commands a timed-out probe is treated as
+    /// our own traffic rather than as the player refusing.
+    ///
+    /// Long enough to cover a burst of clicks plus one probe's budget, short
+    /// enough that something genuinely unresponsive still gives up within a
+    /// few seconds of the last press.
+    private static let commandGrace: TimeInterval = 5
+
     /// When the last full rescan ran.
     @ObservationIgnored private var lastRescan: Date = .distantPast
     /// How rarely a full rescan may run while a cached tab still answers.
@@ -209,9 +252,25 @@ public final class BrowserMedia {
     /// process, with the tile stuck on Connect and nothing left to retry it.
     private func stalled() {
         polling = false
-        timeouts += 1
         // Back off rather than hammering a browser that is busy.
         lastProbe = .now
+        // Our own traffic, not a refusal.
+        //
+        // Commands and probes share one serial queue, and an Apple Event to a
+        // browser is not quick. Pressing play and pause quickly puts several
+        // toggles in that queue, the probe behind them misses its budget
+        // through no fault of the browser, and three of those in a row
+        // blocked browser support outright: the reading dropped, the tile fell
+        // back to Connect, and the only way out was a consent dialog for
+        // consent that had already been given. Which is to say the widget
+        // broke because it was being used.
+        //
+        // A probe that times out while we are still talking says nothing
+        // about whether the browser will answer, so it does not get a strike.
+        // A browser that is genuinely refusing stops being spoken to and
+        // starts collecting them within a few seconds.
+        guard Date().timeIntervalSince(lastCommand) >= Self.commandGrace else { return }
+        timeouts += 1
         guard timeouts >= 3 else { return }
         blocked = true
         needsPermission = true
@@ -221,13 +280,68 @@ public final class BrowserMedia {
         track = nil
     }
 
+    /// Downloads the cover, at most once per URL.
+    ///
+    /// Guarded on the URL rather than on the track: a poll that finds the
+    /// same video again must not refetch, and the shelf polls while the
+    /// panel is open. A failure leaves `artwork` nil and is not retried for
+    /// that URL, because the fallback is already a reasonable picture and a
+    /// retry loop against someone's CDN is not worth a decoration.
+    private func adoptArtwork(_ url: URL?) {
+        guard url != artworkURL else { return }
+        artworkURL = url
+        artwork = nil
+        tint = nil
+        guard let url else { return }
+        Task { [weak self] in
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 6
+            // Decorative, so a stale one from the cache is preferable to
+            // spending a request on it.
+            request.cachePolicy = .returnCacheDataElseLoad
+            guard let (data, response) = try? await URLSession.shared.data(for: request),
+                  (response as? HTTPURLResponse)?.statusCode == 200,
+                  let image = NSImage(data: data)
+            else { return }
+            // Detached on purpose: this Task body inherits main isolation
+            // from the actor it was started on, and a 16x16 decode plus a
+            // histogram is not main-thread work.
+            let tint = await ArtworkTint.extracted(from: data)
+            guard let self, artworkURL == url else { return }
+            artwork = image
+            self.tint = tint
+        }
+    }
+
+    @ObservationIgnored private var artworkURL: URL?
+
     private func apply(_ poll: BrowserBridge.Poll) {
         defer { polling = false }
         needsPermission = poll.denied
         cached = poll.tab
 
-        if let found = poll.track {
+        if var found = poll.track {
+            // Hold what was asked for until the page agrees.
+            //
+            // A command is an Apple Event and a reading is a separate one, so
+            // a poll in flight when the button is pressed comes back
+            // describing the page as it was. Believing it flips the glyph
+            // back under the pointer, and the next reading flips it again,
+            // which is the flicker that made a press feel like it had not
+            // taken. Nothing is wrong with the press; the answer is simply
+            // older than the question.
+            //
+            // Released the moment a reading agrees, so a command that never
+            // landed is corrected by the next poll rather than papered over.
+            if let asked {
+                if found.isPlaying == asked || Date().timeIntervalSince(lastCommand) >= Self.commandHold {
+                    self.asked = nil
+                } else {
+                    found.isPlaying = asked
+                }
+            }
             track = found
+            adoptArtwork(found.artworkURL)
             needsSetup = false
             setupHint = ""
             // The handle is kept even while paused: it is the only way to
@@ -259,6 +373,8 @@ public final class BrowserMedia {
     public func playPause() {
         guard let current = track, let tab = cached else { return }
         track?.isPlaying.toggle()
+        asked = track?.isPlaying
+        lastCommand = .now
         Task { await BrowserBridge.toggle(tab, browser: current.browser) }
     }
 
@@ -276,6 +392,7 @@ public final class BrowserMedia {
         blocked = false
         polling = false
         timeouts = 0
+        lastCommand = .distantPast
         lastProbe = .distantPast
         Task {
             await BrowserBridge.ask()
@@ -485,7 +602,13 @@ enum BrowserBridge {
                 isPlaying: (object["p"] as? Bool) == false,
                 elapsed: duration > 0 ? min(elapsed, duration) : elapsed,
                 duration: duration,
-                browser: browser
+                browser: browser,
+                artworkURL: (object["w"] as? String).flatMap {
+                    // http is refused on purpose. The picture is decorative
+                    // and not worth a cleartext request.
+                    let url = URL(string: $0)
+                    return url?.scheme == "https" ? url : nil
+                }
             )
             // See MediaReading: the page side already drops elements with
             // neither a duration nor a position, but a title can arrive with
@@ -496,6 +619,7 @@ enum BrowserBridge {
             return .track(track, url: object["u"] as? String ?? tab.url)
         }
     }
+
 
     /// Document titles carry a notification count and a site suffix that the
     /// tile has no room for. `mediaSession` titles have neither, so this only
@@ -594,11 +718,12 @@ private enum Script {
     /// Returns a JSON *string*: Chromium's coercion of a JavaScript object
     /// into an Apple Event record is unreliable, a string is not.
     static let probe = """
-    (function(){\(finder)if(!o.length)return '';var v=o[0],\
+    (function(){\(finder)if(!o.length)return '';var v=o[0],w,\
     m=(navigator.mediaSession&&navigator.mediaSession.metadata)||null;\
+    w=(m&&m.artwork&&m.artwork.length)?m.artwork[m.artwork.length-1].src:'';\
     return JSON.stringify({t:m&&m.title?m.title:document.title,\
     a:m&&m.artist?m.artist:location.hostname,p:v.paused,c:v.currentTime,\
-    d:isFinite(v.duration)?v.duration:0,u:location.href})})()
+    d:isFinite(v.duration)?v.duration:0,u:location.href,w:w})})()
     """
 
     static let toggle = """

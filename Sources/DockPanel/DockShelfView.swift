@@ -192,11 +192,20 @@ struct DockShelfView: View {
         var result = Solved()
 
         // Read once: it is not stored, so each access rebuilds the array.
-        let items = app.effectiveItems
+        //
+        // Filtered rather than edited: the apps stay in the profile and come
+        // back the moment the setting goes off, so turning it on costs
+        // nothing and turning it off loses nothing.
+        let items = settings.widgetsOnly
+            ? app.effectiveItems.filter(\.isWidget)
+            : app.effectiveItems
         var entries = items.map {
             Entry(id: $0.id, item: $0, isRunningApp: false, label: label(for: $0))
         }
-        if settings.showRunningApps {
+        // Running apps are apps. Offering to append them to a shelf that is
+        // deliberately showing no apps would be the same control contradicting
+        // itself.
+        if settings.showRunningApps, !settings.widgetsOnly {
             let running = AppCatalog.shared.unpinned(from: items)
             if !running.isEmpty { result.slots = entries.map(Slot.item) + [.separator] }
             for app in running {
@@ -212,7 +221,8 @@ struct DockShelfView: View {
         // Last, behind its own divider, which is where Apple's Dock keeps it.
         // Not a profile item: it is a setting, so it is appended per solve
         // rather than stored, and it can never be dragged out of place.
-        if settings.showTrash, let trash = AppCatalog.trashURL {
+        // The Trash is not a widget either.
+        if settings.showTrash, !settings.widgetsOnly, let trash = AppCatalog.trashURL {
             entries.append(Entry(id: Self.trashID,
                                  item: .folder(id: Self.trashID,
                                                ref: FileRef(url: trash),
@@ -355,6 +365,9 @@ struct DockShelfView: View {
         chrome.itemGap + (vertical ? iconGeometry.height : iconGeometry.width)
     }
 
+    /// Which item the pointer is over, when it is a widget.
+    @State private var hoveredID: UUID?
+
     private var pointer: CGFloat? {
         guard let cursor else { return nil }
         return vertical ? cursor.y : cursor.x
@@ -377,7 +390,13 @@ struct DockShelfView: View {
             shelf(solved)
         }
         .background { WindowReader { shelfWindow = $0 } }
-        .onChange(of: hoverTarget(solved)) { _, new in applyHoverLabel(new) }
+        .onChange(of: hoverTarget(solved)) { _, new in
+            applyHoverLabel(new)
+            // Written here rather than read during body, where a state write
+            // is not allowed, which is the same reason `centre` is carried on
+            // the target itself.
+            hoveredID = new?.id
+        }
         .onDisappear { TooltipWindow.shared.hide() }
         .onAppear { measureScreen() }
         .onReceive(NotificationCenter.default.publisher(
@@ -723,6 +742,9 @@ struct DockShelfView: View {
                            isRunning: isRunning(entry.item),
                            now: app.now) { menu(for: entry) }
             .equatable()
+            // Only widgets read this. An icon already answers the pointer by
+            // magnifying, and a second affordance on top would be noise.
+            .environment(\.widgetHovered, entry.item.isWidget && hoveredID == entry.id)
             // The frame grows along the shelf only. That is what Apple's Dock
             // does: the plate gets longer so neighbours are pushed aside, but
             // its thickness never changes and icons simply grow out of it.
@@ -908,6 +930,8 @@ struct DockShelfView: View {
         /// Carried here rather than written to state: `hoverTarget` is
         /// evaluated during body, where a state write is not allowed.
         var centre: CGPoint
+        /// Which item this is, so a widget under the pointer can be told.
+        var id: UUID
     }
 
     /// How far the shelf sits inside its own panel, along the long axis.
@@ -984,7 +1008,7 @@ struct DockShelfView: View {
         }
         let centre = CGPoint(x: along, y: crossCentre)
         return HoverTarget(text: entry.item.isWidget ? nil : entry.label,
-                           along: along, cross: cross, centre: centre)
+                           along: along, cross: cross, centre: centre, id: entry.id)
     }
 
     private func applyHoverLabel(_ target: HoverTarget?) {
@@ -1342,20 +1366,8 @@ struct DockShelfView: View {
         app.replaceItem(group.id, with: .group(updated))
     }
 
-    private func label(for item: DockItem) -> String {
-        switch item {
-        case .app(_, let bundleID, let ref):
-            ref.resolve()?.deletingPathExtension().lastPathComponent
-                ?? AppCatalog.shared.running.first { $0.id == bundleID }?.name
-                ?? bundleID
-        case .folder(_, let ref, _), .file(_, let ref):
-            ref.resolve()?.lastPathComponent ?? "Missing item"
-        case .link(_, _, let title): title
-        case .group(let g): g.name
-        case .spacer(_, let size): size == .small ? "Small spacer" : "Spacer"
-        case .widget(let widget): WidgetCatalog.entry(widget.kind)?.name ?? widget.kind.rawValue
-        }
-    }
+    /// Settings lists the same items, so the naming lives on DockItem now.
+    private func label(for item: DockItem) -> String { item.displayName }
 }
 
 /// The drawn part of a tile, isolated so SwiftUI can skip it.

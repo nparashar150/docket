@@ -81,15 +81,79 @@ struct SettingsView: View {
     }
 
 
+    /// The sections, in the order the sidebar lists them.
+    ///
+    /// Tinted glyphs rather than plain ones, which is what System Settings
+    /// does and what makes a sidebar scannable: the colour is the thing you
+    /// actually navigate by once you know where a section lives.
+    private static let sections: [(id: String, title: String, symbol: String, tint: Color)] = [
+        ("General", "General", "gearshape.fill", .gray),
+        ("Dock", "Dock", "dock.rectangle", .blue),
+        ("Widgets", "Widgets", "square.grid.2x2.fill", .purple),
+        ("About", "About", "info.circle.fill", .teal),
+    ]
+
     var body: some View {
-        TabView(selection: $selection.current) {
-            Tab("General", systemImage: "gearshape", value: "General") { general }
-            Tab("Dock", systemImage: "dock.rectangle", value: "Dock") { dock }
-            Tab("Widgets", systemImage: "square.grid.2x2", value: "Widgets") { widgets }
-            Tab("About", systemImage: "info.circle", value: "About") { about }
+        // A sidebar rather than a segmented strip along the top.
+        //
+        // Four tabs in a segmented control is the shape every SwiftUI
+        // settings window starts as, and it stops working the moment a
+        // section is longer than the window: the strip says nothing about
+        // where you are in a scroll, and it cannot grow. A sidebar is also
+        // simply what a Mac settings window looks like now.
+        NavigationSplitView {
+            List(selection: Binding(
+                get: { selection.current },
+                set: { selection.current = $0 ?? "General" })) {
+                ForEach(Array(Self.sections.enumerated()), id: \.element.id) { index, section in
+                    Label {
+                        Text(section.title)
+                    } icon: {
+                        // The glyph sits on its own tinted square, sized so
+                        // the four rows line up whatever each symbol's own
+                        // proportions are.
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(section.tint.gradient)
+                            // System Settings runs these at 28 with the glyph
+                            // at about half. At 22 they read as list bullets
+                            // rather than as the thing you aim at.
+                            .frame(width: 28, height: 28)
+                            .overlay {
+                                Image(systemName: section.symbol)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white)
+                            }
+                    }
+                    .tag(section.id)
+                    // Rows sized to the icon rather than to the text, which
+                    // is what stops a 28pt glyph from crowding its label.
+                    .padding(.vertical, 3)
+                    .staggered(index, step: 0.05)
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 220)
+        } detail: {
+            pane
+                // Keyed on the section, so switching sections replays the
+                // stagger instead of swapping a finished pane for another
+                // finished pane.
+                .id(selection.current)
+                .navigationTitle(Self.sections.first { $0.id == selection.current }?.title ?? "Settings")
         }
-        .frame(width: 520, height: 460)
+        // A minimum rather than a fixed size: the window is resizable, and a
+        // hard frame here would win against it.
+        .frame(minWidth: 700, minHeight: 460)
         .onAppear { selection.current = initialTab }
+    }
+
+    @ViewBuilder private var pane: some View {
+        switch selection.current {
+        case "Dock": dock
+        case "Widgets": widgets
+        case "About": about
+        default: general
+        }
     }
 
     // MARK: - General
@@ -266,17 +330,24 @@ struct SettingsView: View {
             }
 
             Section("Placement") {
-                // .disabled was inside the Picker's content, so it applied to
-                // the ForEach and never to the Picker: the control stayed live
-                // while following, accepted a choice, and the shelf ignored it.
+                // Hidden while the Dock dictates it, not greyed.
+                //
+                // Matching the macOS Dock is the default, so a greyed Position
+                // and Size were two permanently dead controls for anyone who
+                // never turned it off, and a third in Behaviour. The "Currently"
+                // row above already says what is being inherited, which is the
+                // explanation a disabled control was standing in for.
+                //
+                // .disabled was also in the wrong place here: inside the
+                // Picker's content it applied to the ForEach and never to the
+                // Picker, so the control stayed live while following, accepted
+                // a choice, and the shelf ignored it.
+                if !state.customDock.followSystemDock {
                 Picker("Position", selection: $state.customDock.position) {
                     ForEach(DockPosition.allCases, id: \.self) { Text(title($0)).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .disabled(state.customDock.followSystemDock)
-                .help(state.customDock.followSystemDock
-                      ? "While matching the macOS Dock, the shelf takes a free edge beside it."
-                      : "Which edge the shelf sits on.")
+                .help("Which edge the shelf sits on.")
 
                 Picker("Display", selection: $state.customDock.displayID) {
                     Text("Active display").tag(UInt32?.none)
@@ -310,22 +381,30 @@ struct SettingsView: View {
                         Button("Match the Dock's size", action: onResumeFollowingScale)
                     }
                 }
+                }
             }
 
-            Section("Material") {
+            Section("Appearance") {
                 Picker("Material", selection: $state.customDock.material) {
                     Text("Frosted").tag(DockMaterial.frosted)
                     Text("Liquid Glass").tag(DockMaterial.liquidGlass)
                 }
                 .pickerStyle(.segmented)
 
+                if state.customDock.material == .liquidGlass {
                 Picker("Glass style", selection: $state.customDock.glass) {
                     ForEach(GlassStyle.allCases, id: \.self) { Text(title($0)).tag($0) }
                 }
-                // Disabled rather than hidden so the section does not resize
-                // every time the material changes.
-                .disabled(state.customDock.material != .liquidGlass)
                 .help("Clear is transparent; Regular keeps a tint. Reduce transparency in Accessibility settings overrides both.")
+                }
+
+                // Magnification lives here rather than under Contents, where
+                // it was filed. It is not contents: it changes how a tile
+                // looks under the pointer, which is this section's subject.
+                if !state.customDock.followSystemDock {
+                    Toggle("Magnification", isOn: $state.customDock.magnification)
+                        .help("Grow icons under the pointer.")
+                }
             }
 
             Section("Behaviour") {
@@ -333,26 +412,42 @@ struct SettingsView: View {
                 // own setting. It used to stay live there and simply have no
                 // effect, which reads as a broken toggle rather than one that
                 // does not apply.
-                Toggle("Automatically hide", isOn: $state.customDock.autoHide)
-                    .disabled(state.customDock.followSystemDock)
-                    .help(state.customDock.followSystemDock
-                          ? "While matching the macOS Dock, the shelf hides when the Dock does."
-                          : "Reveal the shelf when the pointer reaches its screen edge.")
-                Toggle("Show handle when hidden", isOn: $state.customDock.showHandleWhenHidden)
-                    .help("Leaves a sliver of the shelf on screen so you can see where it is. Reaching the edge still reveals it either way.")
-                    .disabled(!state.customDock.autoHide)
-                    .help("A small visible handle while hidden. The edge still reveals the Dock without it.")
+                if !state.customDock.followSystemDock {
+                    Toggle("Automatically hide", isOn: $state.customDock.autoHide)
+                        .help("Reveal the shelf when the pointer reaches its screen edge.")
+                }
+                // Only means anything while something is hiding, so it
+                // follows whichever switch is deciding that.
+                if state.customDock.followSystemDock || state.customDock.autoHide {
+                    Toggle("Show handle when hidden", isOn: $state.customDock.showHandleWhenHidden)
+                        .help("Leaves a sliver of the shelf on screen so you can see where it is. Reaching the edge still reveals it either way.")
+                }
+                // One `.help` each. Two of these carried a second that
+                // silently replaced the first, so the longer and more useful
+                // sentence was never shown.
                 Toggle("Hide when the macOS Dock appears", isOn: $state.customDock.hideWhenMacOSDockAppears)
                     .help("Only matters when both are on the same edge. An auto-hidden Dock and the shelf share a reveal trigger there, so reaching for one uncovers the other.")
-                    .help("Gets out of the way when both Docks share a screen edge.")
                 Toggle("Use as desktop widget", isOn: $state.customDock.useAsDesktopWidget)
                     .help("Keeps the Dock on the desktop, behind app windows.")
             }
 
             Section("Contents") {
-                Toggle("Show running apps", isOn: $state.customDock.showRunningApps)
-                    .help("Include open apps alongside pinned items.")
-                Toggle("Show Trash", isOn: $state.customDock.showTrash)
+                Toggle("Widgets only", isOn: $state.customDock.widgetsOnly)
+                    .help("Hide apps, folders and links, and show only widgets. Nothing is removed; they come back when this is off.")
+                // Both of these add apps, so neither means anything on a
+                // shelf that is showing none. Disabled rather than hidden:
+                // a control that vanishes when you touch a switch above it
+                // reads as a glitch, and its state is worth seeing.
+                // Both add apps, so neither is a question a widgets-only
+                // shelf is asking. They were disabled here, which is the right
+                // instinct beside a sibling toggle and the wrong one under a
+                // switch that changes what the whole section is about: three
+                // greyed rows is most of the section reading as broken.
+                if !state.customDock.widgetsOnly {
+                    Toggle("Show running apps", isOn: $state.customDock.showRunningApps)
+                        .help("Include open apps alongside pinned items.")
+                    Toggle("Show Trash", isOn: $state.customDock.showTrash)
+                }
 
                 // Rearranging a mirrored app takes the list over, which is
                 // right, but nothing used to give it back: one drag and the
@@ -363,34 +458,142 @@ struct SettingsView: View {
                     }
                     .help("The shelf is holding its own copy, taken when you first rearranged one. This hands the list back, and drops the copies so nothing appears twice.")
                 }
-                Toggle("Magnification", isOn: $state.customDock.magnification)
-                    .disabled(state.customDock.followSystemDock)
-                    .help("Grow icons under the pointer.")
             }
+
+            itemList
         }
         .formStyle(.grouped)
     }
 
     // MARK: - Widgets
 
+    /// Whether any widget on the active shelf is a Focus Timer.
+    private var hasFocusTimer: Bool {
+        guard let id = state.customDock.profileID,
+              let profile = state.profiles.first(where: { $0.id == id })
+        else { return false }
+        return profile.items.contains { $0.widget?.kind == .timer }
+    }
+
+    /// A minute count that shows the number it is set to.
+    private func minutes(_ title: String, _ value: Binding<Int>,
+                         in range: ClosedRange<Int>) -> some View {
+        Stepper(value: value, in: range) {
+            LabeledContent(title) { Text("\(value.wrappedValue) min") }
+        }
+    }
+
+    /// What is actually on the shelf, in order.
+    ///
+    /// Everything about the shelf's contents used to be a toggle: whether to
+    /// show running apps, whether to mirror the Dock's. The list itself was
+    /// only visible on the shelf, and only editable by dragging on it, so
+    /// there was no way to see what was pinned without going and looking, and
+    /// no way to remove something you could not reach.
+    ///
+    /// Reordering stays on the shelf, where dragging is the obvious gesture
+    /// and already works. This is for seeing the list and taking things off
+    /// it.
+    @ViewBuilder private var itemList: some View {
+        let items = activeItems
+        Section {
+            if items.isEmpty {
+                Label("Nothing on the shelf yet.", systemImage: "tray")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    HStack(spacing: 9) {
+                        icon(for: item)
+                            .frame(width: 20, height: 20)
+                        Text(item.displayName)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(item.kindName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            remove(item.id)
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Take this off the shelf")
+                    }
+                    .staggered(index)
+                }
+            }
+        } header: {
+            Text("On the shelf")
+        } footer: {
+            Text("Drag on the shelf itself to reorder, and add with the + at its end.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private func icon(for item: DockItem) -> some View {
+        if let image = item.listIcon {
+            Image(nsImage: image).resizable().interpolation(.high)
+        } else {
+            Image(systemName: item.listSymbol)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var activeProfileIndex: Int? {
+        guard let id = state.customDock.profileID else { return nil }
+        return state.profiles.firstIndex { $0.id == id }
+    }
+
+    private var activeItems: [DockItem] {
+        guard let index = activeProfileIndex else { return [] }
+        return state.profiles[index].items
+    }
+
+    private func remove(_ id: UUID) {
+        guard let index = activeProfileIndex else { return }
+        withAnimation(.smooth(duration: 0.22)) {
+            state.profiles[index].items.removeAll { $0.id == id }
+        }
+    }
+
     private var widgets: some View {
         Form {
             WidgetSettingsSections(state: $state)
 
-            Section {
-                Stepper("Focus", value: $state.timer.work, in: 1...180)
-                Stepper("Break", value: $state.timer.rest, in: 1...60)
-                Stepper("Long break", value: $state.timer.longBreak, in: 1...180)
-                Stepper("Sessions before a long break", value: $state.timer.sessions, in: 1...12)
-                LabeledContent("Colour") { swatches }
-                Toggle("Alerts", isOn: $state.timer.alerts)
-                    .help("Notify when a focus session or break ends.")
-            } header: {
-                Text("Focus Timer")
-            } footer: {
-                Text("Every Focus Timer widget shares these settings - Docket treats them as one timer.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            // Only when there is one to configure. These are settings for a
+            // widget, and showing them to somebody whose shelf has no Focus
+            // Timer on it is the same noise as any other control that does
+            // nothing.
+            if hasFocusTimer {
+                Section {
+                    // Every one of these showed a label and a pair of arrows
+                    // and no number, so the only way to find out what the
+                    // focus length was set to was to click an arrow and
+                    // watch the tile change. A Stepper with a title draws
+                    // the title, never the value; the value has to be put
+                    // there. Same shape the per-widget number controls use.
+                    minutes("Focus", $state.timer.work, in: 1...180)
+                    minutes("Break", $state.timer.rest, in: 1...60)
+                    minutes("Long break", $state.timer.longBreak, in: 1...180)
+                    Stepper(value: $state.timer.sessions, in: 1...12) {
+                        LabeledContent("Sessions before a long break") {
+                            Text("\(state.timer.sessions)")
+                        }
+                    }
+                    LabeledContent("Colour") { swatches }
+                    Toggle("Alerts", isOn: $state.timer.alerts)
+                        .help("Notify when a focus session or break ends.")
+                } header: {
+                    Text("Focus Timer")
+                } footer: {
+                    Text("Every Focus Timer widget shares these settings - Docket treats them as one timer.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)

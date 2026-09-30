@@ -103,7 +103,8 @@ struct SystemActivityTile: View {
                                    tint: metric.color,
                                    track: metric.color.opacity(0.16),
                                    diameter: 42,
-                                   lineWidth: 4.5) {
+                                   lineWidth: 4.5,
+                                   peak: history(metric).max()) {
                     Image(systemName: metric.symbol)
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(metric.color)
@@ -375,6 +376,13 @@ struct MetricProgressRing<Content: View>: View {
     var track: Color
     var diameter: CGFloat
     var lineWidth: CGFloat
+    /// The highest this metric reached recently, marked on the track.
+    ///
+    /// A ring reading 20% cannot say whether that is a machine settling down
+    /// or one about to be busy, and the sampler has kept a minute of history
+    /// all along that nothing on the tile ever drew. One tick costs no space
+    /// and turns an instant into a direction.
+    var peak: Double?
     var content: Content
 
     init(progress: Double,
@@ -382,12 +390,14 @@ struct MetricProgressRing<Content: View>: View {
          track: Color,
          diameter: CGFloat,
          lineWidth: CGFloat,
+         peak: Double? = nil,
          @ViewBuilder content: () -> Content) {
         self.progress = progress
         self.tint = tint
         self.track = track
         self.diameter = diameter
         self.lineWidth = lineWidth
+        self.peak = peak
         self.content = content()
     }
 
@@ -408,6 +418,17 @@ struct MetricProgressRing<Content: View>: View {
                 .trim(from: 0, to: fraction)
                 .stroke(track, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(rotation)
+            // Only when it is meaningfully above the arc. A tick sitting on
+            // the head of the arc is the same fact twice, and a tick that
+            // follows the reading around is just a thicker arc.
+            if let peak, peak > clamped + 0.08 {
+                let at = fraction * min(max(peak, 0), 1)
+                Circle()
+                    .trim(from: max(0, at - 0.006), to: min(fraction, at + 0.006))
+                    .stroke(tint.opacity(0.5),
+                            style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                    .rotationEffect(rotation)
+            }
             if clamped > 0 {
                 Circle()
                     .trim(from: 0, to: fraction * clamped)

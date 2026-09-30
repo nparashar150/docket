@@ -1,0 +1,93 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "display-p3:0.96500,0.96500,0.97500,1.00000",
+          "display-p3:0.81500,0.82500,0.85500,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "linear-gradient" : [
+          "display-p3:0.23500,0.24500,0.27500,1.00000",
+          "display-p3:0.07500,0.08000,0.09500,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "name" : "Glow",
+      "layers" : [
+        {
+          "name" : "Glow",
+          "image-name" : "Glow.svg",
+          "glass" : false,
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [ 0, 0 ]
+          }
+        }
+      ],
+      "hidden-specializations" : [
+        {
+          "appearance" : "tinted",
+          "value" : true
+        }
+      ],
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0
+      },
+      "specular" : false
+    },
+    {
+      "name" : "Shelf",
+      "layers" : [
+        {
+          "name" : "Shelf",
+          "image-name" : "Shelf.svg",
+          "glass" : true,
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.25000,0.26000,0.30000,1.00000",
+                  "display-p3:0.08500,0.09000,0.11000,1.00000"
+                ]
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:1.00000,1.00000,1.00000,1.00000",
+                  "display-p3:0.86000,0.87000,0.90000,1.00000"
+                ]
+              }
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [ 0, 0 ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.15
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}

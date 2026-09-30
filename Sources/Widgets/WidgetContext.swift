@@ -30,6 +30,20 @@ public enum WidgetStyle {
     public static let corner: CGFloat = 18
     public static let inset: CGFloat = 10
 
+    /// Enough black over any artwork to keep white ink legible on it.
+    ///
+    /// Derived rather than chosen. The worst case is a white cover, where a
+    /// scrim of `a` leaves a composite of `1 - a`, and white label ink at its
+    /// own 0.847 alpha needs that composite at or below about 0.42 to clear
+    /// 4.5:1. 0.60 lands at 4.67:1 against pure white and better against
+    /// everything else, and leaves 40% of the cover showing, which is enough
+    /// for it to read as the record it is.
+    ///
+    /// The cover is therefore always a dark surface, whatever the appearance,
+    /// which is why the tile pins its ink white alongside this rather than
+    /// letting it follow the system.
+    public static let artworkScrim = 0.60
+
     /// The large figure - times, percentages, amounts.
     public static func value(_ size: CGFloat = 26) -> Font {
         .system(size: size, weight: .bold)
@@ -47,8 +61,34 @@ public enum WidgetStyle {
     /// Digits that change every second must not make the layout shimmer.
     public static var monospacedDigits: Font.Design { .default }
 
+    /// The system's own, unmodified.
+    ///
+    /// Every macOS text token is a pure white or a pure black varying only in
+    /// alpha, read from AppKit on macOS 26: label 0.847 in both appearances,
+    /// secondary 0.549 dark and 0.498 light, tertiary 0.247 and 0.259,
+    /// quaternary 0.098. That is the mechanism of vibrancy rather than an
+    /// implementation detail, and it is why they work on a plate that samples
+    /// the desktop: the text takes up what is behind it instead of sitting on
+    /// top of it opaquely.
+    ///
+    /// `secondary` used to carry `.opacity(0.85)` on top of that, which took
+    /// an already-translucent token to an effective 0.467 dark and 0.423
+    /// light. That is below every level the system defines, and measured over
+    /// this app's own plates it cost 4.68:1 against 5.95:1 in the dark and
+    /// 3.02:1 against 3.86:1 in the light.
+    ///
+    /// The system ships four levels precisely so that nothing has to invent a
+    /// fifth by multiplying one. Where something wants to sit back further
+    /// than secondary the answer is `tertiaryLabelColor`, which is a level
+    /// rather than a fraction.
+    ///
+    /// Worth knowing and not worth fighting: secondary over a light plate
+    /// reaches 3.86:1, short of WCAG's 4.5:1 for body text. That is macOS's
+    /// own figure for supporting text, so matching it is the point. Anything
+    /// that must be read at any cost should be `primary`, not a secondary
+    /// pushed opaque until it passes.
     public static let primary = Color.primary
-    public static let secondary = Color.secondary.opacity(0.85)
+    public static let secondary = Color.secondary
 
     public static func tint(_ color: PaletteColor) -> Color { Color(hex: color.hex) }
     public static func paper(_ color: PaperColor) -> Color { Color(hex: color.hex) }
@@ -75,9 +115,16 @@ public extension Color {
 /// The surface every widget draws on.
 public struct WidgetSurface<Content: View>: View {
     public var fill: Color?
+    /// A picture behind the card instead of a colour.
+    ///
+    /// Only Now Playing uses it, and it is here rather than drawn by that
+    /// tile so a card with a cover behind it is still a card: same corner,
+    /// same edge, same lift under the pointer.
+    public var image: NSImage?
     @ViewBuilder public var content: Content
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.widgetHovered) private var hovered
 
     /// A card is a *recess* in the plate, not something raised on top of it.
     ///
@@ -87,7 +134,15 @@ public struct WidgetSurface<Content: View>: View {
     /// Dockset holds a card at roughly 0.85x the plate's luminance; a black
     /// tint reproduces that ratio against any backdrop the glass samples.
     private var cardFill: Color {
-        scheme == .dark ? .black.opacity(0.16) : .white.opacity(0.40)
+        // In the dark the card's job is to be darker than a plate whose
+        // brightness belongs to the wallpaper rather than to the appearance.
+        // 0.16 is right over a dark desktop and nowhere near enough over a
+        // white one, where white ink on a card measures 1.37:1. See
+        // `DesktopLuminance.cardAlpha`, which returns exactly 0.16 whenever
+        // the desktop is dark, so the common case is untouched.
+        scheme == .dark
+            ? .black.opacity(DesktopLuminance.shared.cardAlpha)
+            : .white.opacity(0.40)
     }
 
     /// Just enough to catch the edge; the fill does the work.
@@ -95,8 +150,11 @@ public struct WidgetSurface<Content: View>: View {
         scheme == .dark ? .white.opacity(0.07) : .black.opacity(0.06)
     }
 
-    public init(fill: Color? = nil, @ViewBuilder content: () -> Content) {
+
+    public init(fill: Color? = nil, image: NSImage? = nil,
+                @ViewBuilder content: () -> Content) {
         self.fill = fill
+        self.image = image
         self.content = content()
     }
 
@@ -107,12 +165,67 @@ public struct WidgetSurface<Content: View>: View {
             .background {
                 RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous)
                     .fill(fill ?? cardFill)
+                    .overlay {
+                        if let image {
+                            Image(nsImage: image)
+                                .resizable()
+                                // Filled and clipped: a cover is square and a
+                                // video thumbnail is not, and a card is
+                                // neither. Letterboxing a background would
+                                // draw bars inside the card.
+                                .aspectRatio(contentMode: .fill)
+                                .overlay(Color.black.opacity(WidgetStyle.artworkScrim))
+                                .clipShape(RoundedRectangle(cornerRadius: WidgetStyle.corner,
+                                                            style: .continuous))
+                        }
+                    }
+                    // Lifted a little out of the recess under the pointer.
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous)
+                            .fill(.white.opacity(hovered ? (scheme == .dark ? 0.07 : 0.22) : 0))
+                    }
             }
             .overlay {
                 RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous)
-                    .strokeBorder(cardEdge, lineWidth: 1)
+                    .strokeBorder(hovered ? hoverEdge : cardEdge, lineWidth: 1)
             }
             .clipShape(RoundedRectangle(cornerRadius: WidgetStyle.corner, style: .continuous))
+            // A transform rather than a layout change, and small.
+            //
+            // Widgets deliberately do not magnify: a 264pt card swelling the
+            // 30% an icon does would displace a quarter of the shelf, so
+            // brushing past one would shove every icon aside. But answering
+            // nothing at all is what made them feel dead beside the icons.
+            // scaleEffect draws bigger without asking for more room, and 2%
+            // stays inside the gap between cards.
+            .scaleEffect(hovered ? 1.02 : 1)
+            .animation(.smooth(duration: 0.16), value: hovered)
+    }
+
+    /// The edge catches the light too, or the card reads as merely paler.
+    private var hoverEdge: Color {
+        scheme == .dark ? .white.opacity(0.16) : .black.opacity(0.12)
+    }
+}
+
+/// Whether the pointer is over this widget.
+///
+/// Through the environment rather than `WidgetContext` so that every widget
+/// gains the highlight without being edited, and because `WidgetSurface` is
+/// the one place that draws a card: putting it there means one definition of
+/// what hover looks like instead of twenty.
+///
+/// Not `.onHover`, which never fires in a non-activating accessory panel.
+/// The shelf already tracks the pointer for magnification and already
+/// hit-tests it to place a tooltip; this rides on the same answer.
+public struct WidgetHoveredKey: EnvironmentKey {
+    public static let defaultValue = false
+}
+
+public extension EnvironmentValues {
+    var widgetHovered: Bool {
+        get { self[WidgetHoveredKey.self] }
+        set { self[WidgetHoveredKey.self] = newValue }
     }
 }
 

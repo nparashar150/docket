@@ -139,7 +139,31 @@ final class DockPanelController: NSObject, NSWindowDelegate {
                 await StrutMode.leave(state: app.state,
                                       clear: { [weak self] in self?.app.state.borrowedDockPrefs = nil })
             }
-            applyPlacement(animated: true)
+            // Re-read Apple's Dock before deciding where the shelf goes.
+            //
+            // Docket has just written those preferences itself and restarted
+            // the Dock. The distributed notification that keeps this cache
+            // honest is posted for *other* processes changing the Dock;
+            // nothing re-reads after our own write. So everything derived
+            // from it would be computed from what the Dock looked like
+            // before we changed it: `effectivePosition` takes the edge
+            // opposite the Dock's, and `effectiveAutoHide` follows its
+            // hiding.
+            //
+            // Both went stale here. Claiming the strip moves the Dock to the
+            // shelf's edge, so a stale read put the shelf on the edge
+            // opposite the one it was already on, which is how it ended up
+            // vertical in the middle of the screen; and the claim turns the
+            // Dock's auto-hide off, so a stale read left the shelf parked
+            // off-screen believing it still auto-hid. Giving the strip back
+            // did the same in reverse.
+            //
+            // `refresh()` rather than `applyPlacement` because the auto-hide
+            // poller has to be started or stopped on the new answer too. It
+            // calls `syncStrut` again, which returns at its own guard now
+            // that what is wanted and what is borrowed agree.
+            SystemDockSettings.shared.refresh()
+            refresh()
         }
     }
 
@@ -256,7 +280,35 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         app.state.customDock.showHandleWhenHidden ? 3 : 0
     }
 
-    private func applyPlacement(animated: Bool) {
+    /// Why the shelf is moving, which decides how it moves.
+    ///
+    /// A pointer at the screen edge wants the shelf *now*, so that motion is
+    /// short and decisive. Mission Control is a slow heavy transition of the
+    /// whole screen, and a shelf that snaps into place in a fifth of a second
+    /// beside it looks like a separate event rather than part of the same
+    /// one.
+    enum Motion {
+        case pointer
+        case missionControl
+
+        var duration: TimeInterval {
+            switch self {
+            case .pointer: 0.22
+            case .missionControl: 0.35
+            }
+        }
+
+        var timing: CAMediaTimingFunctionName {
+            switch self {
+            // Eased at both ends, because it is accompanying something that
+            // starts and stops rather than answering a flick.
+            case .pointer: .easeOut
+            case .missionControl: .easeInEaseOut
+            }
+        }
+    }
+
+    private func applyPlacement(animated: Bool, motion: Motion = .pointer) {
         guard let panel, panel.frame.width > 1, panel.frame.height > 1 else { return }
         let origin = revealed ? revealedOrigin : hiddenOrigin
         guard panel.frame.origin != origin else { return }
@@ -265,8 +317,8 @@ final class DockPanelController: NSObject, NSWindowDelegate {
             // `setFrameOrigin` through the proxy silently does nothing, which
             // left the shelf parked off-screen while it believed it was shown.
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.22
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                context.duration = motion.duration
+                context.timingFunction = CAMediaTimingFunction(name: motion.timing)
                 panel.animator().setFrame(CGRect(origin: origin, size: panel.frame.size),
                                           display: true)
             }
@@ -322,6 +374,7 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
         revealed = false
+        gesture.start { [weak self] in self?.follow($0) }
     }
 
     private func stopPolling() {
@@ -331,7 +384,33 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         hideWorkItem = nil
         groupCloseItem?.cancel()
         groupCloseItem = nil
+        gesture.stop()
+        swiping = false
+        swipe = nil
     }
+
+    /// Cached behind its own throttle; see MissionControlProbe.
+    private var missionControl = MissionControlProbe()
+
+    /// Whether the shelf is out because Mission Control is, so that its
+    /// closing can take the shelf with it.
+    private var heldForMissionControl = false
+
+    /// Only while auto-hiding, like the poller: a shelf that never leaves has
+    /// nothing to bring out.
+    private let gesture = MissionControlGesture()
+
+    /// Whether a swipe is under the fingers, and which way it carries the
+    /// shelf - nil for one it is leaving alone. Decided on the first event
+    /// and kept to the end, so a swipe that started ignored stays ignored.
+    private var swiping = false
+    private var swipe: MissionControlSwipe?
+
+    /// When the last followed swipe let go. Mission Control finishes on its
+    /// own after that, and its backdrop lingers through a spring-back, so
+    /// the probe is not listened to until it has settled.
+    private var swipeEndedAt = Date.distantPast
+    private let swipeSettle: TimeInterval = 0.5
 
     private func poll() {
         guard panel != nil else { return }
@@ -382,6 +461,52 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         }
         groupCloseItem?.cancel()
         groupCloseItem = nil
+
+        // A swipe is carrying the shelf, or has just let go of it. The
+        // fingers are the authority until Mission Control has settled.
+        if swipe != nil { return }
+        if Date().timeIntervalSince(swipeEndedAt) < swipeSettle { return }
+
+        // Mission Control is up, so the shelf belongs on screen with it.
+        //
+        // It was never hidden *by* Mission Control. The shelf sits at CG
+        // layer 21 and Mission Control composites at 18 and 20, so it already
+        // draws above it; what actually happens is that an auto-hidden shelf
+        // is parked off the edge and nothing about a three finger swipe puts
+        // the pointer in the reveal strip. Measured: across a full open and
+        // close the shelf never moved from 97 of its 100 points below the
+        // screen. So it needs telling, not raising.
+        //
+        // Ahead of the Dock-yield below on purpose. Mission Control *is*
+        // Dock.app, and it reveals Apple's Dock as part of itself, which the
+        // next branch would otherwise read as "the Dock is coming, get out of
+        // the way" and use to hide the shelf at exactly the moment it was
+        // asked for.
+        if missionControl.isShowing() {
+            hideWorkItem?.cancel()
+            hideWorkItem = nil
+            if !revealed { setRevealed(true, motion: .missionControl) }
+            heldForMissionControl = true
+            return
+        }
+
+        // Mission Control has just closed, so leave with it.
+        //
+        // Falling through to the ordinary path would schedule a hide behind
+        // `hideDelay`, which exists so that brushing past the shelf on the
+        // way somewhere else does not make it flicker. That has nothing to do
+        // with this, and a third of a second of the shelf sitting alone on
+        // the desktop after the thumbnails have gone is the exit half of the
+        // same seam the entrance had.
+        if heldForMissionControl {
+            heldForMissionControl = false
+            if revealed, !withinShelf(mouse) {
+                hideWorkItem?.cancel()
+                hideWorkItem = nil
+                setRevealed(false, motion: .missionControl)
+                return
+            }
+        }
 
         // Apple's Dock is sliding in over the same edge. Two surfaces stacked
         // on one edge fight: they share a reveal trigger, so reaching for one
@@ -492,7 +617,57 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + hideDelay, execute: work)
     }
 
-    private func setRevealed(_ value: Bool) {
+    /// Moves the shelf with a three finger swipe, the way Apple's Dock moves
+    /// with Mission Control. See MissionControlGesture.
+    private func follow(_ event: MissionControlGesture.Event) {
+        guard let panel else { return }
+        if !swiping {
+            swiping = true
+            swipe = swipeDirection()
+        }
+        if case .ended = event { swiping = false }
+        guard let direction = swipe else { return }
+
+        switch event {
+        case .moved(let progress):
+            let amount = CGFloat(direction.revealed(at: progress))
+            let hidden = hiddenOrigin, shown = revealedOrigin
+            panel.setFrameOrigin(CGPoint(x: hidden.x + (shown.x - hidden.x) * amount,
+                                         y: hidden.y + (shown.y - hidden.y) * amount))
+        case .ended(let progress, let velocity):
+            swipe = nil
+            swipeEndedAt = Date()
+            let commits = direction.commits(at: progress, velocity: velocity)
+            let target = direction == .opening ? commits : !commits
+            heldForMissionControl = target
+            // `setRevealed` does nothing when the state already matches, and
+            // a spring-back is exactly that: the shelf is mid-way but still
+            // believes it is where it started.
+            if revealed == target {
+                applyPlacement(animated: true, motion: .missionControl)
+            } else {
+                setRevealed(target, motion: .missionControl)
+            }
+        }
+    }
+
+    /// Whether this swipe is one to follow, and which way. Nil to leave it.
+    private func swipeDirection() -> MissionControlSwipe? {
+        // Anything that pins the shelf out pins it through a swipe too.
+        if menuIsOpen || GroupWindow.shared.isOpen || WidgetDetailWindow.shared.isOpen {
+            return nil
+        }
+        if !revealed, !heldForMissionControl { return .opening }
+        // Out for Mission Control, and not being reached for.
+        if revealed, heldForMissionControl, !withinShelf(NSEvent.mouseLocation) {
+            return .closing
+        }
+        // Out because the pointer brought it out: Mission Control opening
+        // does not change that, and the probe keeps it there.
+        return nil
+    }
+
+    private func setRevealed(_ value: Bool, motion: Motion = .pointer) {
         guard revealed != value else { return }
         // Everything anchored to a tile has to go with it. Hiding is a window
         // *move*, not an orderOut - the shelf slides to `hiddenOrigin` and its
@@ -509,7 +684,7 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         revealed = value
         hideWorkItem?.cancel()
         hideWorkItem = nil
-        applyPlacement(animated: true)
+        applyPlacement(animated: true, motion: motion)
     }
 
     // MARK: NSWindowDelegate

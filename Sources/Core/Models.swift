@@ -662,6 +662,18 @@ public struct CustomDockSettings: Codable, Hashable, Sendable {
     public var hideWhenMacOSDockAppears: Bool = false
     public var showRunningApps: Bool = true
     public var showTrash: Bool = false
+    /// Widgets and nothing else on the shelf.
+    ///
+    /// For the setup this app is usually run in: Apple's Dock keeps the apps
+    /// on one edge and the shelf carries the widgets on another. Without this
+    /// the shelf mirrors the Dock's apps as well, so the same icons are on
+    /// screen twice and the widgets are pushed to the end of a row they are
+    /// supposed to be the point of.
+    ///
+    /// A display filter, not an edit. Apps, folders and links stay in the
+    /// profile untouched and come straight back when this is turned off, so
+    /// it costs nothing to try.
+    public var widgetsOnly: Bool = false
     /// On by default: a dock that does not magnify does not feel like
     /// the Dock, which is the entire reference point for this surface.
     public var magnification: Bool = true
@@ -692,6 +704,7 @@ public struct CustomDockSettings: Codable, Hashable, Sendable {
         hideWhenMacOSDockAppears = try c.decodeIfPresent(Bool.self, forKey: .hideWhenMacOSDockAppears) ?? false
         showRunningApps = try c.decodeIfPresent(Bool.self, forKey: .showRunningApps) ?? true
         showTrash = try c.decodeIfPresent(Bool.self, forKey: .showTrash) ?? false
+        widgetsOnly = try c.decodeIfPresent(Bool.self, forKey: .widgetsOnly) ?? false
         magnification = try c.decodeIfPresent(Bool.self, forKey: .magnification) ?? true
     }
 

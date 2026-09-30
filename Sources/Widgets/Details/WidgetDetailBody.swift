@@ -61,4 +61,18 @@ struct WidgetDetailBody: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    /// The colour this panel should stand on, if its widget has one.
+    ///
+    /// Here rather than in the chrome so the chrome gains no knowledge of
+    /// kinds, and here rather than a PreferenceKey because the panel reads
+    /// its own fitting size exactly once and a preference travelling up
+    /// through that measurement is a risk taken for nothing.
+    @MainActor
+    static func ground(_ instance: WidgetInstance, _ context: WidgetContext) -> ArtworkTint? {
+        switch instance.kind {
+        case .music: MusicDetail.ground(instance: instance, context: context)
+        default: nil
+        }
+    }
 }

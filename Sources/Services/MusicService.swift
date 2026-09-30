@@ -35,6 +35,9 @@ public struct NowPlaying: @unchecked Sendable, Equatable {
     public var elapsed: TimeInterval
     public var isPlaying: Bool
     public var artwork: NSImage?
+    /// The colour the panel stands on, taken from the artwork's bytes at
+    /// decode time rather than from the image afterwards.
+    public var tint: ArtworkTint?
     public var source: MusicSource
 
     /// 0…1, and never NaN - a live stream reports a zero duration.
@@ -85,6 +88,27 @@ public final class MusicService {
     @ObservationIgnored private var polling = false
     /// Consecutive probes that never came back.
     @ObservationIgnored private var timeouts = 0
+
+    /// When we last spoke to the player ourselves.
+    @ObservationIgnored private var lastCommand: Date = .distantPast
+
+    /// The play state the user asked for, until a reading confirms it.
+    @ObservationIgnored private var asked: Bool?
+
+    /// How long a reading may contradict what was just asked for before it is
+    /// believed. Same bargain as the browser side: long enough for the player
+    /// to hear the command and be read again, short enough that a command
+    /// which never landed corrects itself quickly.
+    private static let commandHold: TimeInterval = 1.5
+
+    /// How long after one of our own commands a timed-out probe is treated as
+    /// our own traffic rather than as the player refusing.
+    ///
+    /// Long enough to cover a burst of clicks plus one probe's budget, short
+    /// enough that something genuinely unresponsive still gives up within a
+    /// few seconds of the last press.
+    private static let commandGrace: TimeInterval = 5
+
     /// Set once a probe has hung; cleared when the user asks to connect.
     @ObservationIgnored private var blocked = false
     @ObservationIgnored private var lastProbe: Date = .distantPast
@@ -165,9 +189,14 @@ public final class MusicService {
     /// side's three-strike backoff.
     private func stall() {
         polling = false
-        timeouts += 1
         // Back off rather than hammering a player that is busy.
         lastProbe = .now
+        // Our own traffic, not a refusal. Same shape as the browser side:
+        // commands and probes share a queue, so a run of presses starves the
+        // probe behind them and three of those blocked the service, leaving
+        // the tile asking for consent it already had.
+        guard Date().timeIntervalSince(lastCommand) >= Self.commandGrace else { return }
+        timeouts += 1
         guard timeouts >= 3 else { return }
         blocked = true
         needsAutomationPermission = true
@@ -188,8 +217,21 @@ public final class MusicService {
             return
         }
 
+        // A probe already in flight when the button was pressed comes back
+        // describing the player as it was, and believing it flips the glyph
+        // back under the pointer. Held until a reading agrees, or until the
+        // window closes and a command that never landed is admitted.
+        if let asked {
+            if track.isPlaying == asked || Date().timeIntervalSince(lastCommand) >= Self.commandHold {
+                self.asked = nil
+            } else {
+                track.isPlaying = asked
+            }
+        }
+
         if track.trackKey == artworkKey {
             track.artwork = nowPlaying?.artwork
+            track.tint = nowPlaying?.tint
             nowPlaying = track
             return
         }
@@ -204,12 +246,13 @@ public final class MusicService {
         // Apple Music artwork event can hang indefinitely, and a URL fetch
         // only stops at URLSession's 60s default. Either wedged the service
         // exactly the way arming the flag too early used to.
-        let image = await withTimeout(seconds: 5) {
+        let found = await withTimeout(seconds: 5) {
             await Bridge.artwork(for: result.artworkRef)
-        } ?? nil
+        }
         // A later track may have landed while the download was in flight.
         guard artworkKey == key, var current = nowPlaying, current.trackKey == key else { return }
-        current.artwork = image
+        current.artwork = found?.image
+        current.tint = found?.tint
         nowPlaying = current
     }
 
@@ -247,7 +290,11 @@ public final class MusicService {
 
     private func command(_ body: String) {
         guard let source = nowPlaying?.source else { return }
-        if body == "playpause" { optimistically { $0.isPlaying.toggle() } }
+        if body == "playpause" {
+            optimistically { $0.isPlaying.toggle() }
+            asked = nowPlaying?.isPlaying
+        }
+        lastCommand = .now
         Bridge.send(body, to: source)
     }
 
@@ -364,14 +411,21 @@ enum Bridge {
         }
     }
 
-    static func artwork(for ref: ArtworkRef?) async -> NSImage? {
+    /// The image and the colour behind it, together.
+    ///
+    /// Both branches already had the bytes in hand and dropped them into
+    /// `NSImage(data:)`, so the tint costs one call beside the decode. Doing
+    /// it later from the NSImage would mean re-encoding a picture we had.
+    /// `Bridge` is a bare enum and so nonisolated, which is where this work
+    /// belongs.
+    static func artwork(for ref: ArtworkRef?) async -> (image: NSImage?, tint: ArtworkTint?) {
         switch ref {
         case .none:
-            return nil
+            return (nil, nil)
         case .url(let url):
             // Never on the main thread, and a dead CDN just means no artwork.
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
-            return NSImage(data: data)
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return (nil, nil) }
+            return (NSImage(data: data), ArtworkTint.extract(data))
         case .appleMusic:
             let data = await offMain { () -> Data? in
                 guard case .value(let descriptor) = script(
@@ -379,8 +433,8 @@ enum Bridge {
                 ) else { return nil }
                 return descriptor.data
             }
-            guard let data, !data.isEmpty else { return nil }
-            return NSImage(data: data)
+            guard let data, !data.isEmpty else { return (nil, nil) }
+            return (NSImage(data: data), ArtworkTint.extract(data))
         }
     }
 

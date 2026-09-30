@@ -10,6 +10,10 @@ import SwiftUI
 struct WidgetSettingsSections: View {
     @Binding var state: PersistedState
 
+    /// Which widget is being edited. `nil` means "whichever is first", which
+    /// is also where a selection goes when its widget leaves the shelf.
+    @State private var selection: UUID?
+
     var body: some View {
         if instances.isEmpty {
             Section("Widgets") {
@@ -17,10 +21,32 @@ struct WidgetSettingsSections: View {
                       systemImage: "square.grid.2x2")
                     .foregroundStyle(.secondary)
             }
+        } else if configurable.isEmpty {
+            Section("Widgets") {
+                Label("The widgets on the Dock have no settings of their own.",
+                      systemImage: "square.grid.2x2")
+                    .foregroundStyle(.secondary)
+            }
         } else {
-            ForEach(configurable, id: \.instance.id) { pair in
+            // One widget at a time, chosen here.
+            //
+            // Every widget's sections used to be stacked into one scroll,
+            // which put four widgets and twenty-odd controls in a column and
+            // made finding the one you meant a hunt. The shelf is a row of
+            // separate things and its settings should be too.
+            Section("Widgets") {
+                Picker("Widget", selection: Binding(
+                    get: { chosen?.instance.id },
+                    set: { selection = $0 })) {
+                    ForEach(configurable, id: \.instance.id) { pair in
+                        Text(sectionTitle(for: pair)).tag(Optional(pair.instance.id))
+                    }
+                }
+            }
+
+            if let pair = chosen {
                 // Numbered only when there is more than one of a kind. Two
-                // Sticky Notes produced two sections both called "Sticky
+                // Sticky Notes produced two headings both called "Sticky
                 // Note", with nothing to say which note each one edited.
                 Section(sectionTitle(for: pair)) {
                     if !pair.entry.variants.isEmpty {
@@ -32,6 +58,19 @@ struct WidgetSettingsSections: View {
                 }
             }
         }
+    }
+
+    /// The selected widget, or the first one.
+    ///
+    /// Resolved rather than stored, so deleting the selected widget, or
+    /// switching to a profile that does not have it, falls back instead of
+    /// showing an empty pane with a picker that has nothing selected.
+    private var chosen: (instance: WidgetInstance, entry: WidgetCatalog.Entry)? {
+        let all = configurable
+        if let selection, let match = all.first(where: { $0.instance.id == selection }) {
+            return match
+        }
+        return all.first
     }
 
     // MARK: Model
@@ -153,14 +192,34 @@ struct WidgetSettingsSections: View {
                     ForEach(choices, id: \.value) { Text($0.title).tag($0.value) }
                 }
             } else {
-                TextField(Self.label(key), text: Binding(
-                    get: { instance.config.string(key, default: fallback) },
-                    set: { text in write(instance) { $0.set(key, .string(text)) } }),
-                    prompt: Text(Self.prompt(key)))
+                // Bordered, and in a LabeledContent rather than carrying its
+                // own label. A bare TextField in a grouped Form draws as
+                // right-aligned text with no box, so a city already set
+                // looked like stray text and an empty one looked like
+                // nothing at all. Giving it the label puts the field
+                // immediately after it, left of where every picker and
+                // toggle in the same form sits; LabeledContent lines it up
+                // with them instead.
+                LabeledContent(Self.label(key)) {
+                    TextField("", text: Binding(
+                        get: { instance.config.string(key, default: fallback) },
+                        set: { text in write(instance) { $0.set(key, .string(text)) } }),
+                        prompt: Text(Self.prompt(key)))
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
+                        .frame(width: 180)
+                }
             }
 
         case .list(let fallback):
             if let choices = Self.choices[key] {
+                // Named, because a bare run of toggles under "Style" does
+                // not say what it selects: four switches reading CPU,
+                // Memory, Disk, Battery could as easily be turning the
+                // readings off as choosing which to show.
+                Text(Self.groupLabel(key))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 // Which of a fixed set: one toggle each.
                 ForEach(choices, id: \.value) { choice in
                     Toggle(choice.title, isOn: Binding(
@@ -180,19 +239,24 @@ struct WidgetSettingsSections: View {
                 // did not exist, which is why a watchlist could never be
                 // edited: `symbols` is read by three views and was written by
                 // nothing at all.
-                TextField(Self.label(key), text: Binding(
-                    get: { instance.config.strings(key, default: Self.strings(fallback))
-                            .joined(separator: ", ") },
-                    set: { text in
-                        let list = text.split(separator: ",")
-                            .map { $0.trimmingCharacters(in: .whitespaces) }
-                            .filter { !$0.isEmpty }
-                        // An empty field is a half-finished edit, not a
-                        // request for a widget with nothing in it.
-                        guard !list.isEmpty else { return }
-                        write(instance) { $0.set(key, .list(list.map { .string($0) })) }
-                    }),
-                    prompt: Text(Self.prompt(key)))
+                LabeledContent(Self.label(key)) {
+                    TextField("", text: Binding(
+                        get: { instance.config.strings(key, default: Self.strings(fallback))
+                                .joined(separator: ", ") },
+                        set: { text in
+                            let list = text.split(separator: ",")
+                                .map { $0.trimmingCharacters(in: .whitespaces) }
+                                .filter { !$0.isEmpty }
+                            // An empty field is a half-finished edit, not a
+                            // request for a widget with nothing in it.
+                            guard !list.isEmpty else { return }
+                            write(instance) { $0.set(key, .list(list.map { .string($0) })) }
+                        }),
+                        prompt: Text(Self.prompt(key)))
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
+                        .frame(width: 180)
+                }
                 .help("Separate with commas.")
             }
 
@@ -213,8 +277,39 @@ struct WidgetSettingsSections: View {
         return ""
     }
 
-    /// "showCallButton" -> "Show Call Button".
-    static func label(_ key: String) -> String { WidgetCatalog.optionLabel(key) }
+    /// "showCallButton" -> "Show Call Button", except where splitting the
+    /// key gives a label that states a value rather than a choice.
+    ///
+    /// `fahrenheit` was the clearest case: a switch labelled with one of the
+    /// two units it picks between says nothing about what "off" means.
+    /// Deriving labels is still the rule, and this is the short list of keys
+    /// the rule reads badly for.
+    private static let labels: [String: String] = [
+        "fahrenheit": "Show temperature in Fahrenheit",
+        "city": "City",
+        "skip": "Skip by",
+        "mini": "Compact layout",
+        "chart": "Show the graph",
+        "expanded": "Wider tile",
+        "name": "Shortcut",
+        "text": "Note",
+        "zone": "Time zone",
+        "symbols": "Symbols",
+    ]
+
+    static func label(_ key: String) -> String {
+        labels[key] ?? WidgetCatalog.optionLabel(key)
+    }
+
+    /// What a run of toggles is choosing between.
+    private static let groupLabels: [String: String] = [
+        "metrics": "Readings to show",
+        "sources": "Players to watch",
+    ]
+
+    static func groupLabel(_ key: String) -> String {
+        groupLabels[key] ?? "Show"
+    }
 
     static func prompt(_ key: String) -> String {
         key == "city" ? "Current location" : ""

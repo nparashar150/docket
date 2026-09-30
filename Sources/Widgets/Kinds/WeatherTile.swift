@@ -110,8 +110,46 @@ struct WeatherTile: View {
         if hours.isEmpty {
             wide(caption: placeCaption, size: 14, lines: 1)
         } else {
+            // Four ahead, not five, because the first cell is now.
+            //
+            // The series is filtered to times after the present, so this
+            // strip showed five future hours and not the temperature
+            // outside, which is the number anybody looking at a weather
+            // widget wants first. Leading with it costs one forecast hour,
+            // which is the cheapest thing on the row.
+            let shown = Array(hours.prefix(4))
+            // Only when there is something to say. A dry afternoon would
+            // otherwise get five empty gutters, which is chrome pretending to
+            // be data and costs the strip height it needs for the figures.
+            let wet = shown.contains { $0.precipitationMM >= 0.1 }
+            // Scaled to the heaviest hour on screen rather than to a fixed
+            // ceiling: 2mm against a 10mm scale is a stub that reads as none
+            // at all, and what the strip is for is the shape of the next few
+            // hours against each other.
+            let peak = max(0.2, shown.map(\.precipitationMM).max() ?? 0)
             HStack(spacing: 0) {
-                ForEach(hours.prefix(5), id: \.date) { hour in
+                if let weather {
+                    VStack(spacing: 1) {
+                        Text("Now")
+                            .font(WidgetStyle.caption(10))
+                            .foregroundStyle(WidgetStyle.primary)
+                            .monospacedDigit()
+                        Image(systemName: weather.symbolName)
+                            .symbolRenderingMode(.multicolor)
+                            .font(.system(size: 15))
+                        Text(degrees(weather.temperatureC))
+                            .font(WidgetStyle.label(12))
+                            .foregroundStyle(WidgetStyle.primary)
+                            .monospacedDigit()
+                        // An empty gutter rather than none, so the row of
+                        // figures keeps one baseline when the rest are wet.
+                        if wet { rain(0, peak: peak) }
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
+                }
+                ForEach(shown, id: \.date) { hour in
                     VStack(spacing: 1) {
                         Text(hour.date.formatted(.dateTime.hour()))
                             .font(WidgetStyle.caption(10))
@@ -124,6 +162,7 @@ struct WeatherTile: View {
                             .font(WidgetStyle.label(12))
                             .foregroundStyle(WidgetStyle.primary)
                             .monospacedDigit()
+                        if wet { rain(hour.precipitationMM, peak: peak) }
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -132,6 +171,31 @@ struct WeatherTile: View {
             }
         }
     }
+
+    /// How much rain this hour is bringing, against the heaviest on screen.
+    ///
+    /// A track behind the fill, so an hour with none still reads as an hour
+    /// that was asked rather than as a gap in the row. Floored at a sliver
+    /// once there is any at all: a hair of drizzle rounding away to nothing
+    /// would say "dry" for an hour that is not.
+    private func rain(_ mm: Double, peak: Double) -> some View {
+        let height: CGFloat = 5
+        return Capsule()
+            .fill(WidgetStyle.secondary.opacity(0.22))
+            .frame(width: 14, height: height)
+            .overlay(alignment: .bottom) {
+                if mm >= 0.05 {
+                    Capsule()
+                        .fill(Self.rainBlue)
+                        .frame(width: 14, height: max(1.5, height * min(1, mm / peak)))
+                }
+            }
+            .accessibilityLabel(mm >= 0.05
+                                ? "\(mm.formatted(.number.precision(.fractionLength(1))))mm"
+                                : "no rain")
+    }
+
+    private static let rainBlue = Color(hex: "#5AC8FA")
 
     /// 56pt of usable width: everything centred and stacked, the symbol
     /// smaller and the caption down to a single tight line.

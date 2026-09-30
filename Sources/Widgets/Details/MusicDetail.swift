@@ -33,10 +33,25 @@ struct MusicDetail: View {
 
     private var browsersEnabled: Bool { config.bool("browsers", default: true) }
 
-    private var playing: Playing? {
+    /// The ground the chrome paints, if the artwork gave one.
+    ///
+    /// Static because the chrome asks before this view exists, and it asks
+    /// through the same `playing` resolution so the colour can never belong
+    /// to a different track than the one on screen.
+    @MainActor
+    static func ground(instance: WidgetInstance, context: WidgetContext) -> ArtworkTint? {
+        MusicDetail(instance: instance, context: context).playing?.tint
+    }
+
+    fileprivate var playing: Playing? {
         guard !context.isPreview else { return nil }
         let native = MusicService.shared.nowPlaying.map(Playing.init(native:))
-        let browser = browsersEnabled ? BrowserMedia.shared.track.map(Playing.init(browser:)) : nil
+        let browser = browsersEnabled
+            ? BrowserMedia.shared.track.map {
+                Playing(browser: $0, artwork: BrowserMedia.shared.artwork,
+                        tint: BrowserMedia.shared.tint)
+            }
+            : nil
         if native?.isPlaying == true { return native }
         if browser?.isPlaying == true { return browser }
         return native ?? browser
@@ -56,7 +71,13 @@ struct MusicDetail: View {
                 // A video with no readable duration would draw two 0:00 clocks
                 // around a bar that can never move, so it gets none.
                 if track.duration > 0 || !track.isBrowser { scrubber(track) }
-                transport(track)
+                // Browser playback has nothing to skip to, so its transport is
+                // a single button, and a row of its own for one control spent
+                // about eighty points of a four hundred point panel on empty
+                // space either side of it. It rides with the scrubber instead,
+                // which is where a compact player puts it. A native player
+                // has five controls and genuinely needs the row.
+                if !track.isBrowser { transport(track) }
             } else if needsPermission {
                 connect
             } else {
@@ -66,27 +87,66 @@ struct MusicDetail: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Ink, pinned to the ground when there is one.
+    ///
+    /// `WidgetStyle.primary` and `.secondary` follow the system appearance,
+    /// which is right on a vibrant plate and wrong on a ground whose
+    /// brightness this app fixed: in a forced-light appearance they would go
+    /// dark and disappear into it. The same reasoning StickyNoteDetail
+    /// already uses for its ink on fixed paper.
+    private var hasGround: Bool { playing?.tint != nil }
+
+    private var ink: Color { hasGround ? .white : WidgetStyle.primary }
+
+    /// Opaque rather than `Color.secondary`, whose translucency caps its
+    /// contrast no matter what is behind it.
+    private var subInk: Color { hasGround ? Color(white: 0.8) : WidgetStyle.secondary }
+
+    private var trackInk: Color {
+        hasGround ? .white.opacity(0.48) : WidgetStyle.secondary.opacity(0.3)
+    }
+
     // MARK: Artwork
 
     /// Clipped twice on purpose: the fill is rounded before the image is laid
     /// over it, and `.fill` aspect ratio overflows the frame after it.
+    ///
+    /// Square only for square artwork. A cover is square and a video
+    /// thumbnail is 16:9, and cropping the second to the first threw away
+    /// 44% of its width from the middle outward, which is how a drag race
+    /// became a man standing in front of nothing. Wide artwork gets a wide
+    /// frame and is fitted into it instead.
     private func artwork(_ image: NSImage?) -> some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(WidgetStyle.primary.opacity(0.08))
+        let wide = (image?.size.width ?? 0) > (image?.size.height ?? 1) * 1.2
+        let side: CGFloat = 170
+        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(hasGround ? .black.opacity(0.22) : WidgetStyle.primary.opacity(0.08))
             .overlay {
                 if let image {
                     Image(nsImage: image)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        // Fitted when the shape of the frame is the shape of
+                        // the picture, so nothing is thrown away.
+                        .aspectRatio(contentMode: wide ? .fit : .fill)
                 } else {
                     Image(systemName: "music.note")
                         .font(.system(size: 52, weight: .medium))
-                        .foregroundStyle(WidgetStyle.primary.opacity(0.3))
+                        .foregroundStyle(hasGround ? .white.opacity(0.35)
+                                                   : WidgetStyle.primary.opacity(0.3))
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .frame(width: 170, height: 170)
+            .frame(width: wide ? 298 : side, height: wide ? 168 : side)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            // Only with a ground, and black rather than tinted: a shadow in
+            // the ground's own hue on the ground itself is invisible.
+            .shadow(color: hasGround ? .black.opacity(0.45) : .clear, radius: 22, y: 10)
+            .overlay {
+                if hasGround {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                }
+            }
             .accessibilityLabel("Artwork")
     }
 
@@ -96,10 +156,10 @@ struct MusicDetail: View {
         VStack(spacing: 2) {
             Text(track.title)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(WidgetStyle.primary)
+                .foregroundStyle(ink)
             Text(track.artist)
                 .font(WidgetStyle.caption(13))
-                .foregroundStyle(WidgetStyle.secondary)
+                .foregroundStyle(subInk)
         }
         // Truncated, never wrapped: the panel is sized once when it opens, so
         // a title that took a second line would be clipped by the window
@@ -114,13 +174,20 @@ struct MusicDetail: View {
     private func scrubber(_ track: Playing) -> some View {
         let ratio = scrubbing ?? track.progress
         return HStack(spacing: 9) {
+            if track.isBrowser {
+                play(track.isPlaying, compact: true) { toggle(track) }
+                    // Pulled back toward the times: the disc carries its own
+                    // margin and the row's spacing on top of it reads as a
+                    // gap rather than as a group.
+                    .padding(.trailing, -3)
+            }
             time(MusicTime.clock(scrubbing.map { $0 * track.duration } ?? track.elapsed),
                  alignment: .leading)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(WidgetStyle.secondary.opacity(0.3))
+                    Capsule().fill(trackInk)
                     Capsule()
-                        .fill(WidgetStyle.primary)
+                        .fill(ink)
                         .frame(width: max(0, geo.size.width * ratio))
                         // Playback advances at a constant rate, so gliding to
                         // each reading at that rate is the truth; a drag is
@@ -181,22 +248,22 @@ struct MusicDetail: View {
     @ViewBuilder
     private func transport(_ track: Playing) -> some View {
         if track.isBrowser {
-            button(track.isPlaying ? "pause.fill" : "play.fill", 28) { toggle(track) }
+            // One control, so it had better look deliberate. A lone glyph
+            // under the scrubber reads as something left unfinished.
+            play(track.isPlaying) { toggle(track) }
         } else {
             let step = max(1, config.int("skip", default: 15))
-            HStack(spacing: 24) {
+            HStack(spacing: 14) {
                 if config.bool("backward") {
-                    button(skipSymbol("gobackward", step), 17) {
+                    secondary(skipSymbol("gobackward", step), 15) {
                         MusicService.shared.skip(by: -Double(step))
                     }
                 }
-                button("backward.end.fill", 19) { MusicService.shared.previous() }
-                button(track.isPlaying ? "pause.fill" : "play.fill", 28) {
-                    MusicService.shared.playPause()
-                }
-                button("forward.end.fill", 19) { MusicService.shared.next() }
+                secondary("backward.end.fill", 17) { MusicService.shared.previous() }
+                play(track.isPlaying) { MusicService.shared.playPause() }
+                secondary("forward.end.fill", 17) { MusicService.shared.next() }
                 if config.bool("forward") {
-                    button(skipSymbol("goforward", step), 17) {
+                    secondary(skipSymbol("goforward", step), 15) {
                         MusicService.shared.skip(by: Double(step))
                     }
                 }
@@ -219,19 +286,37 @@ struct MusicDetail: View {
         return numbered.contains(seconds) ? "\(base).\(seconds)" : base
     }
 
-    private func button(_ symbol: String, _ size: CGFloat,
-                        action: @escaping () -> Void) -> some View {
+    /// The one you came for.
+    ///
+    /// `compact` is the same control sized to sit in the scrubber's row
+    /// rather than to anchor a row of its own.
+    private func play(_ playing: Bool, compact: Bool = false,
+                      action: @escaping () -> Void) -> some View {
         Button {
             guard !context.isPreview else { return }
             action()
         } label: {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: .medium))
-                .foregroundStyle(WidgetStyle.primary)
-                .frame(width: size * 1.5, height: size * 1.4)
-                .contentShape(Rectangle())
+            Image(systemName: playing ? "pause.fill" : "play.fill")
+                .font(.system(size: compact ? 13 : 21, weight: .semibold))
+                // Optical, not geometric: play.fill is a triangle whose mass
+                // sits left of its box, so centring the box leaves it looking
+                // shoved to one side inside a circle. Pause is symmetric and
+                // needs none.
+                .offset(x: playing ? 0 : 1.5)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TransportButton(primary: true, ink: ink, compact: compact))
+        .accessibilityLabel(playing ? "Pause" : "Play")
+    }
+
+    private func secondary(_ symbol: String, _ size: CGFloat,
+                           action: @escaping () -> Void) -> some View {
+        Button {
+            guard !context.isPreview else { return }
+            action()
+        } label: {
+            Image(systemName: symbol).font(.system(size: size, weight: .semibold))
+        }
+        .buttonStyle(TransportButton(primary: false, ink: ink))
     }
 
     // MARK: Empty states
@@ -286,5 +371,47 @@ struct MusicDetail: View {
         let names = sources.map(\.displayName)
         guard !names.isEmpty else { return "no sources" }
         return names.count == 1 ? names[0] : names.joined(separator: " or ")
+    }
+}
+
+/// Transport controls that answer a click and say which one is the point.
+///
+/// Every control used to be the same bare glyph at a different point size on
+/// `.plain`, which draws no pressed state at all: play and pause read as
+/// merely the largest of five rather than the one the panel is for, and
+/// nothing acknowledged being clicked. A filled disc for the primary and
+/// plain glyphs either side is the hierarchy Apple Music uses, and it is the
+/// same disc-deepens-and-shrinks response `TileGlyph` already gives the
+/// shelf, so the two surfaces answer a press the same way.
+///
+/// Ink is passed in rather than taken from `WidgetStyle`. When the panel is
+/// standing on a colour drawn from the artwork, its brightness is fixed by
+/// this app rather than by the system, so a semantic colour here would go
+/// dark in a forced-light appearance and disappear into it. The title and
+/// the scrubber were already pinned for that reason; these were missed.
+private struct TransportButton: ButtonStyle {
+    var primary: Bool
+    var ink: Color
+    /// Sized to ride in another row rather than to anchor one.
+    var compact = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
+        let side: CGFloat = compact ? 28 : (primary ? 46 : 34)
+        return configuration.label
+            // The secondaries sit back a little so the primary leads without
+            // having to be enormous.
+            .foregroundStyle(ink.opacity(primary ? 1 : (pressed ? 1 : 0.7)))
+            .frame(width: side, height: side)
+            .background {
+                if primary {
+                    Circle().fill(ink.opacity(pressed ? 0.26 : 0.14))
+                }
+            }
+            // Round, so the corners of the box do not swallow a click meant
+            // for the neighbour.
+            .contentShape(Circle())
+            .scaleEffect(pressed ? 0.92 : 1)
+            .animation(.snappy(duration: 0.14), value: pressed)
     }
 }

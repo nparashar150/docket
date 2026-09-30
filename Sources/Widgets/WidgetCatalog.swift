@@ -217,6 +217,14 @@ public enum WidgetCatalog {
         switch (kind, key) {
         case (.system, "chart"):
             config.string("layout", default: "numbers") == "numbers"
+        // Mini is a 64pt chip: artwork and one glyph, which is play and
+        // pause. Skipping, seeking and the seek distance are drawn by the
+        // wide layout only, so in mini these were five controls that
+        // accepted a change and produced none. Offering an option that does
+        // nothing is the same defect as offering one nothing reads.
+        case (.music, "previous"), (.music, "next"), (.music, "backward"),
+             (.music, "forward"), (.music, "skip"):
+            !config.bool("mini")
         default:
             true
         }
