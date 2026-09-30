@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/images/icon.png" alt="Docket's icon: a dark shelf rising out of the bottom edge of a pale tile, lit warm where it meets the edge" width="128">
+
 # Docket
 
 ### A free, open-source shelf for the macOS Dock.
@@ -11,7 +13,7 @@ or stands in for it.
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](project.yml)
 [![Release](https://img.shields.io/github/v/release/nparashar150/docket?label=release&color=blue)](https://github.com/nparashar150/docket/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/nparashar150/docket/ci.yml?branch=main&label=build)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-326-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-347-brightgreen)](#tests)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
 <br>
@@ -150,6 +152,23 @@ pictured here. All three need a consent grant that belongs to a bundled app, and
 the capture tool is not one, so their panels would show a permission line and
 nothing else.</sub>
 
+## Settings
+
+Every choice that changes how something looks is shown as a picture of the
+result: the setup, the shelf's material over a scrap of wallpaper, its edge, the
+appearance. Layouts are listed with the icons of what is in them.
+
+<table>
+  <tr>
+    <td valign="top" width="50%">
+      <img src="docs/images/settings-shelf.png" alt="The Shelf settings pane: three pictured setups, Apple Dock, Dock and Shelf, and Shelf only, then matching Apple's Dock, and the material shown as Frosted, Glass and Clear previews" width="100%">
+    </td>
+    <td valign="top" width="50%">
+      <img src="docs/images/settings-layouts.png" alt="The Layouts settings pane: shelf and Apple Dock layouts as rows, each with a strip of the icons it holds" width="100%">
+    </td>
+  </tr>
+</table>
+
 ---
 
 ## What it does
@@ -201,6 +220,15 @@ to address). Browsers are addressed by bundle identifier, never by name, because
 LaunchServices name. Nothing here ever launches a player: an app that is not
 already running is skipped.
 
+**A browser tab gets a picture from wherever it has one.** Any site is read, not
+a list of known ones, and plenty of players publish no artwork at all: Netflix's
+has no media session, no poster and no preview image. So the picture comes from
+the first of the page's session artwork, its video poster, its link-preview
+image, the public copy of the page (which is how Netflix gets the show's name
+and poster), a still of the video where it is not DRM, and last the site's own
+icon. A page with no session only counts once its video is audible and has been
+played, so a muted hero loop is never mistaken for something playing.
+
 </details>
 
 ---
@@ -249,7 +277,7 @@ to. [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
 
 ## Tests
 
-**326 tests, and almost all of them exist because something broke.**
+**347 tests, and almost all of them exist because something broke.**
 
 ```sh
 xcodegen generate
