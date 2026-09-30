@@ -76,6 +76,7 @@ targets:
       - path: Sources/Services/PollGate.swift
       - path: Sources/DockPanel/ScrollRelay.swift
       - path: Sources/DockPanel/MissionControlGesture.swift
+      - path: Sources/Services/PagePreview.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.namanparashar.plinth.tests

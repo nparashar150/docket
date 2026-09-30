@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             LibraryWindow.shared.show(app: state)
         }
         if let tab = ProcessInfo.processInfo.environment["PLINTH_OPEN_SETTINGS"] {
-            SettingsWindow.shared.show(app: state, tab: tab.isEmpty ? "General" : tab)
+            SettingsWindow.shared.show(app: state, tab: tab.isEmpty ? "Shelf" : tab)
         }
         if ProcessInfo.processInfo.environment["PLINTH_PROBE_LOCATION"] != nil {
             SettingsWindow.shared.show(app: state)

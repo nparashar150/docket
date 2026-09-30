@@ -54,6 +54,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     // MARK: Menu
 
+    /// Short, and in order of use.
+    ///
+    /// It used to open on two headed lists, "Custom Dock" and "macOS Dock",
+    /// each with its own checkmark and a colour dot, which asked you to know
+    /// the model before you could read the menu, and put "Restore Original
+    /// Dock", which is rare and rewrites the real Dock, beside everyday
+    /// actions. Each kind of layout is now one submenu that names the one in
+    /// use, and the Dock's rarer tools live inside its own.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
@@ -64,14 +72,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        addProfileSection(to: menu, kind: .customDock, title: "Custom Dock")
-        addProfileSection(to: menu, kind: .macOSDock, title: "macOS Dock")
-
-        menu.addItem(.separator())
-        if app.state.originalMacOSDock != nil {
-            menu.addItem(item("Restore Original Dock", #selector(restoreDock)))
+        let hasShelf = app.state.setup != .macOSDockOnly
+        if hasShelf {
+            menu.addItem(layoutMenu(.customDock, title: "Shelf Layout"))
         }
+        menu.addItem(layoutMenu(.macOSDock, title: "Apple Dock Layout"))
         menu.addItem(.separator())
+
         // Only when there is one. An always-present "you are up to date" line
         // is a permanent reminder of something nobody needs reminding of.
         if let update = UpdateService.shared.available {
@@ -81,40 +88,53 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             menu.addItem(entry)
             menu.addItem(.separator())
         }
-        menu.addItem(item("Add Widget…", #selector(openLibrary)))
+        if hasShelf {
+            menu.addItem(item("Add Widget…", #selector(openLibrary)))
+        }
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
+        menu.addItem(.separator())
         menu.addItem(item("Quit Docket", #selector(quit), key: "q"))
     }
 
     @objc private func openUpdate() { UpdateService.shared.openReleasePage() }
 
-    private func addProfileSection(to menu: NSMenu, kind: ProfileKind, title: String) {
+    /// One kind of layout: the parent names the one in use, the submenu
+    /// switches between them.
+    private func layoutMenu(_ kind: ProfileKind, title: String) -> NSMenuItem {
         let profiles = app.profiles(of: kind)
-        guard !profiles.isEmpty else { return }
-
-        let header = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
-
         let activeID = kind == .customDock ? app.state.customDock.profileID : app.state.macOSDock.profileID
+        let active = profiles.first { $0.id == activeID }?.name
+
+        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
         for profile in profiles {
             let entry = NSMenuItem(title: profile.name, action: #selector(selectProfile(_:)), keyEquivalent: "")
             entry.target = self
             entry.representedObject = profile.id
             entry.state = profile.id == activeID ? .on : .off
-            entry.image = swatch(profile.color)
-            menu.addItem(entry)
+            submenu.addItem(entry)
         }
-        menu.addItem(.separator())
-    }
+        if !profiles.isEmpty { submenu.addItem(.separator()) }
+        if kind == .macOSDock {
+            submenu.addItem(item("Save Current Dock", #selector(captureDock)))
+            if app.state.originalMacOSDock != nil {
+                submenu.addItem(item("Restore Original Dock", #selector(restoreDock)))
+            }
+            submenu.addItem(.separator())
+        }
+        submenu.addItem(item("Edit Layouts…", #selector(openLayouts)))
+        parent.submenu = submenu
 
-    private func swatch(_ color: PaletteColor) -> NSImage {
-        let size = NSSize(width: 10, height: 10)
-        return NSImage(size: size, flipped: false) { rect in
-            NSColor(Color(hex: color.hex)).setFill()
-            NSBezierPath(ovalIn: rect).fill()
-            return true
+        // The layout in use, greyed at the trailing edge the way a menu shows
+        // a current value, so the top level still says what is active.
+        if let active {
+            let label = NSMutableAttributedString(string: title + "  ")
+            label.append(NSAttributedString(string: active, attributes: [
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+            parent.attributedTitle = label
         }
+        return parent
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
@@ -138,6 +158,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func restoreDock() {
         Task { await app.restoreOriginalDock() }
+    }
+
+    @objc private func captureDock() {
+        Task { await app.captureCurrentDock() }
+    }
+
+    @objc private func openLayouts() {
+        SettingsWindow.shared.show(app: app, tab: "Layouts")
     }
 
     @objc private func openLibrary() {
