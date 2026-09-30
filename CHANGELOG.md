@@ -3,6 +3,41 @@
 The 0.1.0 entry was written by hand. Everything after it is generated from the
 commits on `main`, which is why the voice changes partway down.
 
+## [0.1.5](https://github.com/nparashar150/dockset/compare/v0.1.4...v0.1.5) (2026-09-30)
+
+
+### Features
+
+* a shelf rising out of the edge, as a layered macOS 26 icon ([6d369c8](https://github.com/nparashar150/dockset/commit/6d369c86056fb532870bf8d2ddc0534088d60cd7))
+* a shelf that carries widgets and nothing else ([58694c6](https://github.com/nparashar150/dockset/commit/58694c6f6d91115c2b9007e8d9499c9842cacdab))
+* a sidebar, the shelf's contents as a list, and a staggered arrival ([1baf910](https://github.com/nparashar150/dockset/commit/1baf9103e8940e494262366e81625e00488bb993))
+* real cover art for browser video, and widgets that answer the pointer ([2438419](https://github.com/nparashar150/dockset/commit/2438419783e367c805f2cea0eed87e4359522158))
+* show the app that is playing when there is no album art ([2c5166b](https://github.com/nparashar150/dockset/commit/2c5166ba6250a314fc605706d3455fe2b9412c3e))
+* the cover is the music card, not a stamp on it ([00c1947](https://github.com/nparashar150/dockset/commit/00c19473205292a2d60ed60e2b8b0a5afc4c6f4e))
+* the Now Playing panel stands on its artwork's colour ([3d0cc52](https://github.com/nparashar150/dockset/commit/3d0cc5234dbdf1964f2a0d4e9703f3ebbb4ec77a))
+* the shelf comes out with Mission Control, and in step with it ([915ea32](https://github.com/nparashar150/dockset/commit/915ea32f7232d7251e24caa53f5cfed9d35bea25))
+* the shelf rides the Mission Control swipe instead of chasing it ([56f0fe0](https://github.com/nparashar150/dockset/commit/56f0fe09f50f641651fae84b29b40f8d36c3a0b6))
+* the weather strip shows rain, not five copies of the same number ([738af53](https://github.com/nparashar150/dockset/commit/738af53263efa4a1d4cc4414bc201aba6fabe3f8))
+* weather leads with now, and the rings say which way they are going ([35cc3c5](https://github.com/nparashar150/dockset/commit/35cc3c596f2a7d94617fd2f28750f45d3df32db4))
+
+
+### Bug Fixes
+
+* a press stays pressed until the player says otherwise ([96a7050](https://github.com/nparashar150/dockset/commit/96a7050294d0d3a8fb3d7bb9ae800dc508aa7397))
+* an empty sticky note reads as paper rather than as a failure ([2d8a745](https://github.com/nparashar150/dockset/commit/2d8a7454f61564c5261ade37c099f86b33eb9ac2))
+* draw Apple's material rather than a tinted copy of it ([9db391c](https://github.com/nparashar150/dockset/commit/9db391c64e825288821284613858989eb717c631))
+* give the panel's transport a primary control and a pressed state ([9e2ec27](https://github.com/nparashar150/dockset/commit/9e2ec27a1ece5e101ead1a5f021d587526669961))
+* make the Widgets settings tab usable ([e53612c](https://github.com/nparashar150/dockset/commit/e53612c0f17a25d9eec88128e10584f1319770a3))
+* settings per widget, and a mini Now Playing that can do something ([9a21099](https://github.com/nparashar150/dockset/commit/9a21099fe357323e80a1ac800ae8c966e71aff36))
+* stop spending a row on one button ([6e94a33](https://github.com/nparashar150/dockset/commit/6e94a339cfa771b0c7716600fc4cc04b041b2434))
+* stop the music widget mistaking its own traffic for a refusal ([affc28a](https://github.com/nparashar150/dockset/commit/affc28a52fd54f63047c76fb84dd0aa1e0676375))
+* stop the shelf chasing a Dock move it caused ([0f8b063](https://github.com/nparashar150/dockset/commit/0f8b063a4e3e2b000285801d391d44e4f7d8462d))
+* the mini music chip is the control and nothing else ([f070edd](https://github.com/nparashar150/dockset/commit/f070edd518089bb46af8a0c952d3f64a34623efa))
+* the shelf answers to the wallpaper it is standing on ([cfe5203](https://github.com/nparashar150/dockset/commit/cfe520376ffef42f697bc49ed25abe3ce2b27853))
+* the shelf leaves Mission Control with the swipe, not after it ([ca2d62c](https://github.com/nparashar150/dockset/commit/ca2d62c84c69ffaa04b27cdca34f2f635c68b248))
+* the shelf leaves Mission Control with the swipe, not after it ([2b53e4f](https://github.com/nparashar150/dockset/commit/2b53e4fadfc11203b57fe8655ad8d91d159f76bb))
+* use the system's text token instead of a dimmer copy of it ([5b2a4a9](https://github.com/nparashar150/dockset/commit/5b2a4a9f2ba118cf199cf469d16968dd0cc0796f))
+
 ## [0.1.4](https://github.com/nparashar150/docket/compare/v0.1.3...v0.1.4) (2026-09-27)
 
 
