@@ -29,7 +29,7 @@ targets:
     platform: macOS
     sources:
       - path: Sources
-      - path: Resources/Assets.xcassets
+      - path: Resources/AppIcon.icon
     settings:
       base:
         PRODUCT_NAME: Docket
