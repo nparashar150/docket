@@ -3,6 +3,20 @@
 The 0.1.0 entry was written by hand. Everything after it is generated from the
 commits on `main`, which is why the voice changes partway down.
 
+## [0.1.6](https://github.com/nparashar150/dockset/compare/v0.1.5...v0.1.6) (2026-09-30)
+
+
+### Features
+
+* Now Playing on any site, a picture-first panel, and settings that show their choices ([09ac35b](https://github.com/nparashar150/dockset/commit/09ac35bb1e083d22c02342d6708fc607a09bb727))
+* Now Playing reads any site and stands on its picture ([14ae33a](https://github.com/nparashar150/dockset/commit/14ae33a0efd10b4cfc77f8743ac4cc52f3fd4a3f))
+* settings and the menu show what each choice does ([4c1c446](https://github.com/nparashar150/dockset/commit/4c1c446947aa3e0e89c94e3608930237f7fbae0f))
+
+
+### Bug Fixes
+
+* choosing a setup takes effect without a relaunch ([82f0dd6](https://github.com/nparashar150/dockset/commit/82f0dd682d74dc39c5b36905ced84780866fb73c))
+
 ## [0.1.5](https://github.com/nparashar150/dockset/compare/v0.1.4...v0.1.5) (2026-09-30)
 
 
