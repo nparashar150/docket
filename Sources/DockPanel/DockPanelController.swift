@@ -374,6 +374,7 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
         revealed = false
+        gesture.start { [weak self] in self?.follow($0) }
     }
 
     private func stopPolling() {
@@ -383,6 +384,9 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         hideWorkItem = nil
         groupCloseItem?.cancel()
         groupCloseItem = nil
+        gesture.stop()
+        swiping = false
+        swipe = nil
     }
 
     /// Cached behind its own throttle; see MissionControlProbe.
@@ -391,6 +395,22 @@ final class DockPanelController: NSObject, NSWindowDelegate {
     /// Whether the shelf is out because Mission Control is, so that its
     /// closing can take the shelf with it.
     private var heldForMissionControl = false
+
+    /// Only while auto-hiding, like the poller: a shelf that never leaves has
+    /// nothing to bring out.
+    private let gesture = MissionControlGesture()
+
+    /// Whether a swipe is under the fingers, and which way it carries the
+    /// shelf - nil for one it is leaving alone. Decided on the first event
+    /// and kept to the end, so a swipe that started ignored stays ignored.
+    private var swiping = false
+    private var swipe: MissionControlSwipe?
+
+    /// When the last followed swipe let go. Mission Control finishes on its
+    /// own after that, and its backdrop lingers through a spring-back, so
+    /// the probe is not listened to until it has settled.
+    private var swipeEndedAt = Date.distantPast
+    private let swipeSettle: TimeInterval = 0.5
 
     private func poll() {
         guard panel != nil else { return }
@@ -441,6 +461,11 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         }
         groupCloseItem?.cancel()
         groupCloseItem = nil
+
+        // A swipe is carrying the shelf, or has just let go of it. The
+        // fingers are the authority until Mission Control has settled.
+        if swipe != nil { return }
+        if Date().timeIntervalSince(swipeEndedAt) < swipeSettle { return }
 
         // Mission Control is up, so the shelf belongs on screen with it.
         //
@@ -590,6 +615,56 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         }
         hideWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + hideDelay, execute: work)
+    }
+
+    /// Moves the shelf with a three finger swipe, the way Apple's Dock moves
+    /// with Mission Control. See MissionControlGesture.
+    private func follow(_ event: MissionControlGesture.Event) {
+        guard let panel else { return }
+        if !swiping {
+            swiping = true
+            swipe = swipeDirection()
+        }
+        if case .ended = event { swiping = false }
+        guard let direction = swipe else { return }
+
+        switch event {
+        case .moved(let progress):
+            let amount = CGFloat(direction.revealed(at: progress))
+            let hidden = hiddenOrigin, shown = revealedOrigin
+            panel.setFrameOrigin(CGPoint(x: hidden.x + (shown.x - hidden.x) * amount,
+                                         y: hidden.y + (shown.y - hidden.y) * amount))
+        case .ended(let progress, let velocity):
+            swipe = nil
+            swipeEndedAt = Date()
+            let commits = direction.commits(at: progress, velocity: velocity)
+            let target = direction == .opening ? commits : !commits
+            heldForMissionControl = target
+            // `setRevealed` does nothing when the state already matches, and
+            // a spring-back is exactly that: the shelf is mid-way but still
+            // believes it is where it started.
+            if revealed == target {
+                applyPlacement(animated: true, motion: .missionControl)
+            } else {
+                setRevealed(target, motion: .missionControl)
+            }
+        }
+    }
+
+    /// Whether this swipe is one to follow, and which way. Nil to leave it.
+    private func swipeDirection() -> MissionControlSwipe? {
+        // Anything that pins the shelf out pins it through a swipe too.
+        if menuIsOpen || GroupWindow.shared.isOpen || WidgetDetailWindow.shared.isOpen {
+            return nil
+        }
+        if !revealed, !heldForMissionControl { return .opening }
+        // Out for Mission Control, and not being reached for.
+        if revealed, heldForMissionControl, !withinShelf(NSEvent.mouseLocation) {
+            return .closing
+        }
+        // Out because the pointer brought it out: Mission Control opening
+        // does not change that, and the probe keeps it there.
+        return nil
     }
 
     private func setRevealed(_ value: Bool, motion: Motion = .pointer) {
