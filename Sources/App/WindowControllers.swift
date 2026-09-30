@@ -102,7 +102,7 @@ final class LibraryWindow: HostedWindow {
 final class SettingsWindow: HostedWindow {
     static let shared = SettingsWindow()
 
-    func show(app: AppState, tab: String = "General") {
+    func show(app: AppState, tab: String = "Shelf") {
         // Set before presenting, so a window that is only being raised still
         // lands on the tab the caller asked for.
         SettingsSelection.shared.current = tab
@@ -126,7 +126,8 @@ final class SettingsWindow: HostedWindow {
                 onDuplicateProfile: { if let id = $0 { app.duplicateProfile(id) } },
                 onDeleteProfile: { if let id = $0 { app.deleteProfile(id) } },
                 lastError: app.lastError,
-                onClearError: { app.clearError() }
+                onClearError: { app.clearError() },
+                onRestoreOriginalDock: { Task { await app.restoreOriginalDock() } }
             ),
             title: "Docket Settings",
             // Taller and resizable, because the Widgets tab is not a fixed
@@ -135,7 +136,7 @@ final class SettingsWindow: HostedWindow {
             // and scrolled the rest inside a box nobody could enlarge.
             // Wide enough for a sidebar and a form beside it without the
             // form's controls crowding their labels.
-            size: NSSize(width: 800, height: 640),
+            size: NSSize(width: 720, height: 600),
             resizable: true
         )
     }
