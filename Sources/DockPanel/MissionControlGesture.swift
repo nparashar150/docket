@@ -123,9 +123,14 @@ enum MissionControlSwipe: Equatable {
     /// shelf about two thirds out, exactly as far as the thumbnails are.
     static let travel = 1.0
 
-    /// Where a let-go is projected to land, per unit of velocity. Measured
-    /// flicks let go at 0.17 to 0.3 with velocity 3.5 to 6 and still commit.
-    static let throwWeight = 0.1
+    /// Where a let-go is projected to land, per unit of velocity, and how far
+    /// that has to be to carry through. Fitted to nine real swipes, every one
+    /// of which committed: flicks let go as early as 0.09 at velocity 1.7, so
+    /// Dock.app follows the direction of travel far more than the distance.
+    /// The first fit (0.1 and 0.5) called most exits a spring-back, so the
+    /// shelf bounced back up and only left when the probe caught up.
+    static let throwWeight = 0.3
+    static let commitDistance = 0.35
 
     /// How far out the shelf is, 0 parked to 1 in place, for signed progress.
     func revealed(at progress: Double) -> Double {
@@ -139,6 +144,6 @@ enum MissionControlSwipe: Equatable {
     /// probe corrects it a moment later with the ordinary slide.
     func commits(at progress: Double, velocity: Double) -> Bool {
         let toward = self == .opening ? -1.0 : 1.0
-        return toward * (progress + velocity * Self.throwWeight) >= 0.5
+        return toward * (progress + velocity * Self.throwWeight) >= Self.commitDistance
     }
 }

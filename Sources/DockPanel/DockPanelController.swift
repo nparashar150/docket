@@ -290,11 +290,16 @@ final class DockPanelController: NSObject, NSWindowDelegate {
     enum Motion {
         case pointer
         case missionControl
+        /// The rest of a swipe after the fingers let go. It is already moving,
+        /// so it starts at speed and slows, rather than easing in from rest
+        /// the way a slide that begins from nothing does.
+        case swipeRelease
 
         var duration: TimeInterval {
             switch self {
             case .pointer: 0.22
             case .missionControl: 0.35
+            case .swipeRelease: 0.25
             }
         }
 
@@ -304,6 +309,7 @@ final class DockPanelController: NSObject, NSWindowDelegate {
             // starts and stops rather than answering a flick.
             case .pointer: .easeOut
             case .missionControl: .easeInEaseOut
+            case .swipeRelease: .easeOut
             }
         }
     }
@@ -644,9 +650,9 @@ final class DockPanelController: NSObject, NSWindowDelegate {
             // a spring-back is exactly that: the shelf is mid-way but still
             // believes it is where it started.
             if revealed == target {
-                applyPlacement(animated: true, motion: .missionControl)
+                applyPlacement(animated: true, motion: .swipeRelease)
             } else {
-                setRevealed(target, motion: .missionControl)
+                setRevealed(target, motion: .swipeRelease)
             }
         }
     }
