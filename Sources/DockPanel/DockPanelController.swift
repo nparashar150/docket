@@ -100,9 +100,25 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         panel = nil
     }
 
-    /// Re-read everything that can change: level, placement, auto-hide.
+    /// Re-read everything that can change: whether there is a shelf at all,
+    /// level, placement, auto-hide.
     func refresh() {
-        panel?.level = level
+        // The setup decides whether there is a shelf, and it used to be read
+        // once at launch. Choosing "Apple Dock" in Settings saved the choice
+        // and left the shelf on screen, and choosing a shelf from there
+        // showed nothing until a relaunch. Every setup change already lands
+        // here, so this is where it is honoured.
+        guard app.state.setup != .macOSDockOnly else {
+            stopPolling()
+            hide()
+            // Still: leaving "Shelf only" for "Apple Dock" has to hand the
+            // Dock's strip back.
+            syncStrut()
+            return
+        }
+        guard let panel else { return show() }
+        if !panel.isVisible { panel.orderFrontRegardless() }
+        panel.level = level
         if app.effectiveAutoHide {
             startPolling()
         } else {
