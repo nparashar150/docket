@@ -457,7 +457,9 @@ final class DockPanelController: NSObject, NSWindowDelegate {
         // Command-W - it does not close because the pointer wandered off, any
         // more than a popover does. So there is nothing to schedule here; the
         // shelf just stays put while the panel is up.
-        if WidgetDetailWindow.shared.isOpen {
+        // The widget library pins it for the same reason: what is picked
+        // there lands on the shelf, and it should be in view when it does.
+        if WidgetDetailWindow.shared.isOpen || LibraryWindow.shared.isOpen {
             hideWorkItem?.cancel()
             hideWorkItem = nil
             if !revealed { setRevealed(true) }
@@ -676,7 +678,8 @@ final class DockPanelController: NSObject, NSWindowDelegate {
     /// Whether this swipe is one to follow, and which way. Nil to leave it.
     private func swipeDirection() -> MissionControlSwipe? {
         // Anything that pins the shelf out pins it through a swipe too.
-        if menuIsOpen || GroupWindow.shared.isOpen || WidgetDetailWindow.shared.isOpen {
+        if menuIsOpen || GroupWindow.shared.isOpen || WidgetDetailWindow.shared.isOpen
+            || LibraryWindow.shared.isOpen {
             return nil
         }
         if !revealed, !heldForMissionControl { return .opening }
