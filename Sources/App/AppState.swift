@@ -35,6 +35,16 @@ public final class AppState {
             if state.timer != oldValue.timer {
                 onTimerChanged?(state.timer)
             }
+            // A panel open on a widget that has just left the shelf. Removing
+            // one goes through the shelf's menu, the Settings list, a drag
+            // off the shelf or a change of layout, and every one of them
+            // lands here, so this is the one place that sees them all. The
+            // panel used to stay up pointing at nothing, still answering
+            // clicks for a widget that no longer existed.
+            if let open = WidgetDetailWindow.shared.openWidgetID,
+               !effectiveItems.contains(where: { $0.widget?.id == open }) {
+                WidgetDetailWindow.shared.close()
+            }
         }
     }
 

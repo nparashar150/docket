@@ -622,7 +622,13 @@ private func render(to directory: String) async {
         .map { Set($0.split(separator: ",").map(String.init)) }
     for shot in shots(since: Date()) where only?.contains(shot.name) ?? true {
         await shot.prepare()
-        let context = WidgetContext(position: .bottom, now: .now, isPreview: shot.isPreview)
+        // A live panel reads what its service has fetched, and offscreen
+        // there is no window to show the number arriving in.
+        if !shot.isPreview { try? await Task.sleep(for: .seconds(5)) }
+        // SHOTS_PREVIEW draws every panel from its own sample data, for
+        // judging a layout without depending on a fetch landing.
+        let sample = shot.isPreview || ProcessInfo.processInfo.environment["SHOTS_PREVIEW"] != nil
+        let context = WidgetContext(position: .bottom, now: .now, isPreview: sample)
         let view = WidgetDetailBody(instance: shot.instance, context: context)
             .padding(16)
             .frame(width: WidgetDetail.width(shot.instance.kind), alignment: .leading)

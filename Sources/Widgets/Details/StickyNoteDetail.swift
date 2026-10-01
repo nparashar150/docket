@@ -30,7 +30,14 @@ struct StickyNoteDetail: View {
     private var stored: String { instance.config.string("text") }
 
     var body: some View {
-        WidgetSurface(fill: paper) {
+        // The same card every other panel is drawn on, with paper as its
+        // surface. It was a tile surface sitting inside the panel's full
+        // padding, so it stood a good 10pt further in from the edge than any
+        // other panel's card, and read as a sheet in a frame rather than as
+        // the panel.
+        DetailCard {
+            paper
+        } content: {
             // Return finishes the note and Shift-Return breaks the line, which
             // is the vertical field's own behaviour: a note is usually one
             // thought, and the panel is open to be written in, not read.
@@ -58,7 +65,9 @@ struct StickyNoteDetail: View {
                 // are already saved.
                 .onDisappear { commit() }
                 .accessibilityLabel("Note")
-                .padding(.vertical, 12)
+                // The card forces the dark scheme; the caret has to be ink
+                // like the words, or it is white on paper.
+                .tint(Self.ink)
                 // Tall enough that a short note leaves the rest of the sheet
                 // blank, the way paper does.
                 .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
