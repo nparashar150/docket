@@ -411,31 +411,44 @@ struct PanelShape: Shape {
         case .right: body.size.width -= depth
         }
 
-        var path = Path(roundedRect: body, cornerRadius: Self.radius,
-                        style: .continuous)
+        let outline = Path(roundedRect: body, cornerRadius: Self.radius, style: .continuous)
 
         // Kept clear of the corners: a tail growing out of the curve reads as
         // a dent in the outline rather than a point at anything.
         let half = Self.arrowBase / 2
         let limit = Self.radius + half
+        // The tail starts a little inside the body so the two overlap, and
+        // is then merged into it. It used to be a second shape added beside
+        // the rounded rectangle, so the hairline traced both: a line straight
+        // across the tail's base, and the tail's sides drawn over the body's
+        // edge where they met. One outline has neither.
+        let overlap: CGFloat = 2
+        var tail = Path()
         switch edge {
         case .bottom:
             let x = min(max(body.minX + limit, body.midX + arrowOffset), body.maxX - limit)
-            path.move(to: CGPoint(x: x - half, y: body.maxY))
-            path.addLine(to: CGPoint(x: x, y: rect.maxY))
-            path.addLine(to: CGPoint(x: x + half, y: body.maxY))
+            tail.move(to: CGPoint(x: x - half, y: body.maxY - overlap))
+            tail.addLine(to: CGPoint(x: x - 2.5, y: rect.maxY - 1.4))
+            // A softened point, the way a popover's tail ends.
+            tail.addQuadCurve(to: CGPoint(x: x + 2.5, y: rect.maxY - 1.4),
+                              control: CGPoint(x: x, y: rect.maxY + 0.4))
+            tail.addLine(to: CGPoint(x: x + half, y: body.maxY - overlap))
         case .left:
             let y = min(max(body.minY + limit, body.midY + arrowOffset), body.maxY - limit)
-            path.move(to: CGPoint(x: body.minX, y: y - half))
-            path.addLine(to: CGPoint(x: rect.minX, y: y))
-            path.addLine(to: CGPoint(x: body.minX, y: y + half))
+            tail.move(to: CGPoint(x: body.minX + overlap, y: y - half))
+            tail.addLine(to: CGPoint(x: rect.minX + 1.4, y: y - 2.5))
+            tail.addQuadCurve(to: CGPoint(x: rect.minX + 1.4, y: y + 2.5),
+                              control: CGPoint(x: rect.minX - 0.4, y: y))
+            tail.addLine(to: CGPoint(x: body.minX + overlap, y: y + half))
         case .right:
             let y = min(max(body.minY + limit, body.midY + arrowOffset), body.maxY - limit)
-            path.move(to: CGPoint(x: body.maxX, y: y - half))
-            path.addLine(to: CGPoint(x: rect.maxX, y: y))
-            path.addLine(to: CGPoint(x: body.maxX, y: y + half))
+            tail.move(to: CGPoint(x: body.maxX - overlap, y: y - half))
+            tail.addLine(to: CGPoint(x: rect.maxX - 1.4, y: y - 2.5))
+            tail.addQuadCurve(to: CGPoint(x: rect.maxX - 1.4, y: y + 2.5),
+                              control: CGPoint(x: rect.maxX + 0.4, y: y))
+            tail.addLine(to: CGPoint(x: body.maxX - overlap, y: y + half))
         }
-        path.closeSubpath()
-        return path
+        tail.closeSubpath()
+        return outline.union(tail)
     }
 }
