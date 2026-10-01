@@ -30,50 +30,51 @@ struct HydrationDetail: View {
 
     private func content(now: Date) -> some View {
         let left = remaining(now: now)
-        return VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                // A time of day, which is the thing the tile's countdown is
-                // not: "2:49 PM" is a moment you can plan around, "17:22" is
-                // one you have to do arithmetic on.
-                Text(left > 0 ? "Next drink at \(clock(now.addingTimeInterval(left)))"
-                              : "Time for a drink")
-                    .font(WidgetStyle.label(14))
-                    .foregroundStyle(WidgetStyle.primary)
-                Text(headlineCaption(left, now: now))
-                    .font(WidgetStyle.caption(11))
-                    .foregroundStyle(WidgetStyle.secondary)
-                    .monospacedDigit()
+        // The glass behind the card is full the moment a drink goes in and
+        // drains as the next one comes due: the level is the interval, which
+        // is the one thing the model actually measures. Not a day's tally,
+        // which it has no record of.
+        return DetailCard {
+            ZStack(alignment: .bottom) {
+                MeshBackdrop(color: accent)
+                Water(level: left / duration,
+                      phase: now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4) / 4,
+                      colour: accent)
             }
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(left > 0 ? "NEXT DRINK AT" : "DUE NOW")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.7))
+                    // A time of day, which is the thing the tile's countdown is
+                    // not: "2:49 PM" is a moment you can plan around, "17:22" is
+                    // one you have to do arithmetic on.
+                    Text(left > 0 ? clock(now.addingTimeInterval(left)) : "Drink up")
+                        .font(.system(size: 52, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WidgetStyle.primary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text(headlineCaption(left, now: now))
+                        .font(WidgetStyle.label(13))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .monospacedDigit()
+                }
 
-            Divider()
+                HStack(spacing: 8) {
+                    StatChip(label: "Last drink", value: lastDrinkLine(now: now))
+                    StatChip(label: "Every", value: interval)
+                        .frame(width: 96)
+                }
 
-            VStack(spacing: 6) {
-                row("Last drink", lastDrinkLine(now: now))
-                row("Reminder every", interval)
+                drinkButton
             }
-
-            drinkButton
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: Rows
-
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 12) {
-            Text(label)
-                .font(WidgetStyle.caption(11))
-                .foregroundStyle(WidgetStyle.secondary)
-            Spacer(minLength: 0)
-            Text(value)
-                .font(WidgetStyle.label(11))
-                .foregroundStyle(WidgetStyle.primary)
-                .monospacedDigit()
-                .rollingValue(value)
-        }
-        .lineLimit(1)
-        .accessibilityElement(children: .combine)
-    }
+    // MARK: Action
 
     /// The tile's "+" is 13pt across because a card's own click belongs to the
     /// shelf and nothing on it may spread. The panel has no such contest, so
@@ -84,15 +85,13 @@ struct HydrationDetail: View {
             // redraws this panel, so it is animated from here too.
             withAnimation(.snappy(duration: 0.35)) { drink() }
         } label: {
-            Text("Log a drink")
+            Label("Log a drink", systemImage: "drop.fill")
                 .font(WidgetStyle.label(13))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 34)
-                .background {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous).fill(accent)
-                }
-                .contentShape(.rect)
+                .frame(height: 38)
+                .background(Capsule().fill(.white.opacity(0.24)))
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Log a drink")
@@ -120,8 +119,8 @@ struct HydrationDetail: View {
         guard !context.isPreview, last > 0 else { return "Not logged yet" }
         let date = Date(timeIntervalSince1970: last)
         let since = max(0, now.timeIntervalSince(date))
-        return since < 60 ? "\(clock(date)) · just now"
-                          : "\(clock(date)) · \(spelled(since)) ago"
+        return since < 60 ? "\(clock(date)), just now"
+                          : "\(clock(date)), \(spelled(since)) ago"
     }
 
     // MARK: Data
@@ -174,5 +173,42 @@ struct HydrationDetail: View {
     private func spelled(_ seconds: TimeInterval) -> String {
         Duration.seconds(seconds)
             .formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
+    }
+}
+
+/// Water filling the card to `level`, its surface a slow double wave.
+private struct Water: View {
+    var level: Double
+    /// 0…1 through one swell, so the surface moves with the panel's tick.
+    var phase: Double
+    var colour: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            let top = size.height * (1 - min(1, max(0.04, level)))
+            ZStack {
+                surface(size, top: top, shift: phase + 0.5, amplitude: 5)
+                    .fill(MeshBackdrop.muted(colour).opacity(0.5))
+                surface(size, top: top + 3, shift: phase, amplitude: 4)
+                    .fill(LinearGradient(colors: [MeshBackdrop.muted(colour, by: 0.62),
+                                                  MeshBackdrop.muted(colour, by: 0.85)],
+                                         startPoint: .top, endPoint: .bottom))
+            }
+            .animation(.smooth(duration: 0.8), value: level)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func surface(_ size: CGSize, top: CGFloat, shift: Double, amplitude: CGFloat) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: 0, y: size.height))
+            for x in stride(from: 0, through: size.width, by: 4) {
+                let angle = (Double(x / max(size.width, 1)) + shift) * 2 * .pi * 1.5
+                p.addLine(to: CGPoint(x: x, y: top + amplitude * CGFloat(sin(angle))))
+            }
+            p.addLine(to: CGPoint(x: size.width, y: size.height))
+            p.closeSubpath()
+        }
     }
 }

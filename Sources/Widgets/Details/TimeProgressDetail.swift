@@ -23,11 +23,42 @@ struct TimeProgressDetail: View {
         // assigned once when it opens, so that clock is frozen for as long as
         // the panel stays up and every row would sit perfectly still.
         TimelineView(.periodic(from: .now, by: 60)) { tick in
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Span.allCases, id: \.self) { row($0, now: tick.date) }
+            let now = tick.date
+            let shown = Span(rawValue: period) ?? .year
+            let gone = fraction(Calendar.current.dateInterval(of: shown.component, for: now), now: now)
+            // The span on the tile as one enormous figure, then all three as
+            // tracks to compare: how much of it is gone is the whole reading.
+            DetailCard {
+                MeshBackdrop(color: accent)
+            } content: {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text("\(Int(gone * 100))")
+                                .font(.system(size: 64, weight: .semibold, design: .rounded))
+                                .foregroundStyle(WidgetStyle.primary)
+                                .rollingValue(Int(gone * 100))
+                            Text("%")
+                                .font(.system(size: 30, weight: .medium, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        .monospacedDigit()
+                        Text("of \(shown.title(now)) gone")
+                            .font(WidgetStyle.label(13))
+                            .foregroundStyle(.white.opacity(0.75))
+                    }
+
+                    VStack(spacing: 6) {
+                        ForEach(Span.allCases, id: \.self) { row($0, now: now) }
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// The tile's catalog colour.
+    private var accent: Color {
+        Color(hex: WidgetCatalog.accentHex(.progress) ?? PaletteColor.teal.hex)
     }
 
     // MARK: Rows
@@ -74,6 +105,15 @@ struct TimeProgressDetail: View {
             .lineLimit(1)
             bar(fraction)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .glassPane(cornerRadius: 12)
+        // The span the tile is showing is lit, so the panel says which of
+        // the three the card behind it is answering.
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(span.rawValue == period ? 0.55 : 0), lineWidth: 1)
+        }
         // One row is one fact; read out as four labels it becomes a mouthful.
         .accessibilityElement(children: .combine)
     }
@@ -100,9 +140,9 @@ struct TimeProgressDetail: View {
     private func bar(_ fraction: Double) -> some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                Capsule().fill(WidgetStyle.primary.opacity(0.12))
+                Capsule().fill(.white.opacity(0.14))
                 Capsule()
-                    .fill(WidgetStyle.primary)
+                    .fill(.white.opacity(0.8))
                     .frame(width: geometry.size.width * fraction)
             }
         }

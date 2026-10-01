@@ -14,14 +14,29 @@ struct StocksDetail: View {
     var instance: WidgetInstance
     var context: WidgetContext
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
-        if instance.kind == .watchlist {
-            watchlist
-        } else {
-            single
+        // Green or red before a number is read: the card is the day's move.
+        DetailCard {
+            MeshBackdrop(color: backdropColour)
+        } content: {
+            if instance.kind == .watchlist {
+                watchlist
+            } else {
+                single
+            }
         }
+    }
+
+    /// The single symbol's move, or the watchlist's on balance.
+    private var backdropColour: Color {
+        let rising: Bool
+        if instance.kind == .watchlist {
+            let moves = symbols.compactMap { quote($0)?.changePercent }
+            rising = moves.reduce(0, +) >= 0
+        } else {
+            rising = quote(symbol)?.rising ?? true
+        }
+        return rising ? Color(red: 0.1, green: 0.55, blue: 0.35) : Color(red: 0.7, green: 0.18, blue: 0.2)
     }
 
     // MARK: Data
@@ -46,8 +61,9 @@ struct StocksDetail: View {
         context.isPreview ? .preview(symbol) : StockService.shared.quote(symbol)
     }
 
+    /// Always the dark scheme's: everything here is on the card.
     private func accent(_ quote: StockQuote?) -> Color {
-        StockInk.accent(rising: quote?.rising ?? true, scheme: scheme)
+        StockInk.accent(rising: quote?.rising ?? true, scheme: .dark)
     }
 
     /// Infinities arrive in a half-populated intraday series and would poison
@@ -98,7 +114,7 @@ struct StocksDetail: View {
     private func price(_ quote: StockQuote) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Text(quote.priceText)
-                .font(WidgetStyle.value(34))
+                .font(WidgetStyle.value(44))
                 .foregroundStyle(WidgetStyle.primary)
                 .monospacedDigit()
                 .rollingValue(quote.price)
@@ -126,8 +142,11 @@ struct StocksDetail: View {
                 .rollingValue(quote.changePercent)
         }
         .font(WidgetStyle.label(12))
-        .foregroundStyle(accent(quote))
+        .foregroundStyle(.white)
         .lineLimit(1)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(accent(quote).opacity(0.45), in: .capsule)
     }
 
     /// Drawn whenever there is a series behind it, regardless of the tile's
@@ -140,9 +159,11 @@ struct StocksDetail: View {
     private func chart(_ quote: StockQuote) -> some View {
         let samples = series(quote)
         if samples.count >= 2 {
-            VStack(alignment: .leading, spacing: 4) {
-                DitherChart(samples: samples, tint: accent(quote))
-                    .frame(height: 68)
+            // To the card's edges and foot, as the ground the price stands
+            // on rather than a figure boxed underneath it.
+            ZStack(alignment: .bottom) {
+                DitherChart(samples: samples, tint: .white.opacity(0.85))
+                    .frame(height: 84)
                 // The ends of the plotted range, not a clock: the service keeps
                 // closes without their timestamps, so a time axis here would be
                 // guesswork.
@@ -151,16 +172,21 @@ struct StocksDetail: View {
                     Spacer(minLength: 8)
                     rangeLabel(samples.last)
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             }
-            .padding(.top, 2)
+            .padding(.horizontal, -16)
+            .padding(.bottom, -16)
+            .padding(.top, 6)
         }
     }
 
     private func rangeLabel(_ value: Double?) -> some View {
         Text(value?.formatted(.number.precision(.fractionLength(2))) ?? "")
-            .font(WidgetStyle.caption(10))
-            .foregroundStyle(WidgetStyle.secondary)
+            .font(WidgetStyle.label(10))
+            .foregroundStyle(.white.opacity(0.85))
             .monospacedDigit()
+            .shadow(color: .black.opacity(0.4), radius: 2)
     }
 
     // MARK: Watchlist
@@ -168,7 +194,7 @@ struct StocksDetail: View {
     private var watchlist: some View {
         let symbols = symbols
         let quotes = symbols.map { quote($0) }
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             // Configured order, and every row weighted the same: the panel
             // exists to show the whole list at once, so there is no one row it
             // should be leading with. Indexed rather than keyed on the ticker,
@@ -195,15 +221,20 @@ struct StocksDetail: View {
                 .rollingValue(quote?.price ?? 0)
             Text(quote?.percentText ?? "-")
                 .font(WidgetStyle.label(11))
-                .foregroundStyle(accent(quote))
+                .foregroundStyle(.white)
                 .monospacedDigit()
                 .rollingValue(quote?.changePercent ?? 0)
                 // Fixed so the signed percentages line up as a column instead
                 // of ragging against the varying price widths.
-                .frame(width: 58, alignment: .trailing)
+                .frame(width: 58)
+                .padding(.vertical, 3)
+                .background(accent(quote).opacity(0.5), in: .capsule)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.75)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .glassPane(cornerRadius: 10)
         // The tile's own weighting for a reading that has stopped arriving.
         .opacity(quote?.stale == true ? 0.55 : 1)
     }

@@ -20,18 +20,35 @@ struct RevenueDetail: View {
     var context: WidgetContext
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            accountRow
-            metricRow
-            unconnected
-            Text(caption)
-                .font(WidgetStyle.caption(12))
-                .foregroundStyle(WidgetStyle.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Divider().opacity(0.4)
-            about
+        // The provider's own colour, so a Stripe panel is recognisably
+        // Stripe's before a word is read.
+        DetailCard {
+            MeshBackdrop(color: brand)
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    accountRow
+                    metricRow
+                    Text(caption)
+                        .font(WidgetStyle.caption(12))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                unconnected
+                about
+                    .padding(12)
+                    .glassPane()
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Stripe's blurple, Paddle's navy, Shopify's green.
+    private var brand: Color {
+        switch instance.kind {
+        case .paddle: Color(hex: "#2B3A67")
+        case .shopify: Color(hex: "#008060")
+        default: Color(hex: "#635BFF")
+        }
     }
 
     // MARK: Rows
@@ -41,9 +58,10 @@ struct RevenueDetail: View {
             Circle()
                 .fill(accent)
                 .frame(width: 8, height: 8)
-            Text(account)
-                .font(WidgetStyle.label(13))
-                .foregroundStyle(WidgetStyle.primary)
+            Text(account.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(.white.opacity(0.75))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -52,17 +70,17 @@ struct RevenueDetail: View {
     private var metricRow: some View {
         HStack(spacing: 8) {
             Text(metricTitle)
-                .font(WidgetStyle.label(15))
+                .font(.system(size: 26, weight: .semibold))
                 .foregroundStyle(WidgetStyle.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Spacer(minLength: 8)
             Text(periodShort)
                 .font(WidgetStyle.label(11))
-                .foregroundStyle(accent)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Capsule().fill(accent.opacity(0.18)))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(.white.opacity(0.18)))
                 .fixedSize()
         }
     }
@@ -72,27 +90,30 @@ struct RevenueDetail: View {
     /// contents happen to be words.
     private var unconnected: some View {
         VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: "link.badge.plus")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.white.opacity(0.85))
             Text("Not connected")
                 .font(WidgetStyle.value(20))
                 .foregroundStyle(WidgetStyle.primary)
             Text("Docket holds no \(provider) credentials, so there is no amount to show and no history to chart.")
                 .font(WidgetStyle.caption(12))
-                .foregroundStyle(WidgetStyle.secondary)
+                .foregroundStyle(.white.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
             // Points at the panel's own settings button rather than repeating
             // it: the header already carries the only control that can reach
             // the widget's settings from here.
             Label("Connect an account with the settings button at the top of this panel",
                   systemImage: "slider.horizontal.3")
-                .font(WidgetStyle.caption(11.5))
-                .foregroundStyle(accent)
+                .font(WidgetStyle.label(11.5))
+                .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(WidgetStyle.secondary.opacity(0.35),
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(0.4),
                               style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
         }
     }
@@ -107,7 +128,7 @@ struct RevenueDetail: View {
                 .foregroundStyle(WidgetStyle.primary)
             Text(explanation)
                 .font(WidgetStyle.caption(11.5))
-                .foregroundStyle(WidgetStyle.secondary)
+                .foregroundStyle(.white.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

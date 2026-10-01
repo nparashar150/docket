@@ -33,73 +33,82 @@ struct FocusTimerDetail: View {
         // A timer that has never run has nothing to put back.
         let untouched = state.deadline == nil && state.paused == nil && state.duration == nil
 
-        return VStack(spacing: 16) {
-            VStack(spacing: 4) {
-                Text(docketClockString(left))
-                    .font(WidgetStyle.value(52))
-                    .monospacedDigit()
-                    .foregroundStyle(WidgetStyle.primary)
-                    .rollingValue(Int(left.rounded(.up)))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Text(sessionLine(state))
-                    .font(WidgetStyle.caption(12))
-                    .foregroundStyle(WidgetStyle.secondary)
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: 10) {
-                button(primaryTitle(state, left: left), fill: tint, label: .white,
-                       action: { togglePrimary() })
-                button("Reset", fill: nil, label: WidgetStyle.secondary,
-                       action: { reset() })
-                    .disabled(untouched)
-                    .opacity(untouched ? 0.4 : 1)
-            }
-
-            HStack(spacing: 6) {
-                ForEach(Self.presets, id: \.self) { minutes in
-                    preset(minutes, active: Int((total / 60).rounded()) == minutes, tint: tint)
+        // The timer's own colour as the ground, and the session draining out
+        // of a bar along the card's foot: the whole card is the countdown.
+        return DetailCard {
+            MeshBackdrop(color: tint)
+        } content: {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(sessionLine(state).uppercased())
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1)
+                    Text(docketClockString(left))
+                        .font(.system(size: 64, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(WidgetStyle.primary)
+                        .rollingValue(Int(left.rounded(.up)))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                 }
+
+                HStack(spacing: 10) {
+                    // White on the timer's colour, lettered in it: the one
+                    // solid shape on the card is the one to press.
+                    button(primaryTitle(state, left: left), fill: .white.opacity(0.24), label: .white,
+                           action: { togglePrimary() })
+                    button("Reset", fill: nil, label: .white,
+                           action: { reset() })
+                        .disabled(untouched)
+                        .opacity(untouched ? 0.4 : 1)
+                }
+
+                HStack(spacing: 6) {
+                    ForEach(Self.presets, id: \.self) { minutes in
+                        preset(minutes, active: Int((total / 60).rounded()) == minutes, tint: tint)
+                    }
+                }
+
+                drain(left / total)
             }
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    /// What is left of the session, to the card's edges and foot.
+    private func drain(_ fraction: Double) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(.white.opacity(0.14))
+                Rectangle()
+                    .fill(.white.opacity(0.9))
+                    .frame(width: geo.size.width * min(1, max(0, fraction)))
+            }
+        }
+        .frame(height: 4)
+        .padding(.horizontal, -16)
+        .padding(.bottom, -16)
+        .accessibilityHidden(true)
     }
 
     // MARK: - Pieces
 
-    /// Filled for the action the panel is about, outlined for the other:
+    /// Solid for the action the panel is about, frosted for the other:
     /// resetting is the rarer choice and should not compete with starting.
     private func button(_ title: String, fill: Color?, label: Color,
                         action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(WidgetStyle.label(13))
-                .foregroundStyle(label)
-                .frame(maxWidth: .infinity)
-                .frame(height: 34)
-                .background {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(fill ?? .clear)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .strokeBorder(fill == nil ? Color.primary.opacity(0.14) : .clear,
-                                              lineWidth: 1)
-                        }
-                }
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
+        ClockPanelButton(title: title, fill: fill, ink: label, action: action)
     }
 
     private func preset(_ minutes: Int, active: Bool, tint: Color) -> some View {
         Button { pick(minutes) } label: {
             Text("\(minutes) min")
-                .font(WidgetStyle.caption(11))
-                .foregroundStyle(active ? .white : WidgetStyle.secondary)
+                .font(WidgetStyle.label(11))
+                .foregroundStyle(.white.opacity(active ? 1 : 0.75))
                 .frame(maxWidth: .infinity)
                 .frame(height: 26)
-                .background(Capsule().fill(active ? tint : Color.primary.opacity(0.06)))
+                .background(Capsule().fill(Color.white.opacity(active ? 0.28 : 0.1)))
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)

@@ -1,10 +1,12 @@
 import Foundation
 import SwiftUI
 
-/// A glass that fills up between drinks (168×124, always expanded).
+/// A drop that fills up between drinks.
 ///
-/// The card is a light blue in *both* appearances - matching the shipped
-/// design - so only the ink flips with the colour scheme.
+/// It was a whole card of light blue water, the one tile on the shelf with a
+/// colour of its own, and it read as a sticker among graphite cards. The
+/// water is now the mark in the tile's badge: the same rising level, on the
+/// same neutral card as every other tile.
 ///
 /// A click on the card belongs to the shelf, so logging a drink is a "+" beside
 /// the readout rather than the whole glass: the card is what opens the widget,
@@ -12,8 +14,6 @@ import SwiftUI
 struct HydrationTile: View {
     var instance: WidgetInstance
     var context: WidgetContext
-
-    @Environment(\.colorScheme) private var scheme
 
     /// Guard against a zero or negative stored interval: it would divide by
     /// zero below and NaN the whole path.
@@ -63,56 +63,50 @@ struct HydrationTile: View {
         return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
     }
 
-    // MARK: Palette
-
-    private var cardFill: Color { Color(hex: scheme == .dark ? "#E0F2FF" : "#EBF3FA") }
-    private var waterTop: Color { Color(hex: scheme == .dark ? "#96DDFE" : "#74D0F5") }
-    private var waterBottom: Color { Color(hex: scheme == .dark ? "#76CAFE" : "#5EBAFB") }
-    private var crest: Color { Color(hex: scheme == .dark ? "#AEE2FF" : "#97D9F7") }
-
     var body: some View {
-        WidgetSurface(fill: cardFill) {
-            Group {
-                if context.position.isVertical {
-                    // 76×88: the water is the widget, so it keeps the whole
-                    // column and the readout floats in the middle of it. No
-                    // room - and no need - for the caption.
-                    VStack(spacing: 4) {
-                        Text(clock)
-                            .font(.system(size: 17, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundStyle(WidgetStyle.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                        drinkButton(size: 11)
-                    }
-                } else {
-                    // The readout and the control sit side by side rather than
-                    // stacked: a wide card is 58pt tall, which the clock, its
-                    // caption and a 26pt disc under them overran - the "+" was
-                    // being clipped off the bottom of the glass.
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(clock)
-                                .font(.system(size: 21, weight: .bold))
-                                .monospacedDigit()
-                                .foregroundStyle(WidgetStyle.primary)
-                                .lineLimit(1)
-                            Text("Next drink")
-                                .font(WidgetStyle.caption(14))
-                                .foregroundStyle(WidgetStyle.primary.opacity(0.75))
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        drinkButton(size: 13)
-                    }
+        WidgetSurface {
+            if context.position.isVertical {
+                // 76x88: drop, clock, and the control under them.
+                VStack(spacing: 4) {
+                    TileBadge(size: 34) { drop(size: 17) }
+                    Text(clock)
+                        .font(.system(size: 16, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(WidgetStyle.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    drinkButton(size: 10)
+                }
+            } else {
+                HStack(spacing: 10) {
+                    TileBadge { drop(size: 20) }
+                    TileReading(value: clock, caption: "Next drink")
+                    Spacer(minLength: 0)
+                    drinkButton(size: 12)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // The surface insets its content by 10pt; undo that for the water
-            // alone so it reaches the rounded edges the surface clips to.
-            .background(water.padding(.horizontal, -WidgetStyle.inset))
         }
+    }
+
+    /// The drop's outline, with the water filled in up to the level: a muted
+    /// steel blue, the accent and nothing louder.
+    private func drop(size: CGFloat) -> some View {
+        ZStack {
+            Image(systemName: "drop")
+                .foregroundStyle(WidgetStyle.secondary)
+            Image(systemName: "drop.fill")
+                .foregroundStyle(Color(hex: PaletteColor.blue.hex).mix(with: WidgetStyle.primary, by: 0.6))
+                .mask {
+                    GeometryReader { geo in
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            Rectangle().frame(height: geo.size.height * level)
+                        }
+                    }
+                }
+                .animation(.snappy(duration: 0.35), value: level)
+        }
+        .font(.system(size: size, weight: .regular))
     }
 
     /// Only ever as big as itself: the card's own click has to reach the shelf,
@@ -127,43 +121,5 @@ struct HydrationTile: View {
             withAnimation(.snappy(duration: 0.35)) { drink() }
         })
         .accessibilityLabel("Log a drink")
-    }
-
-    private var water: some View {
-        Canvas { ctx, size in
-            let surface = size.height * (1 - level)
-            // Back swell first, half a wavelength out of phase, so it peeks
-            // out wherever the front wave troughs.
-            ctx.fill(
-                wave(in: size, surface: surface - 1.5, amplitude: 2, phase: .pi),
-                with: .color(crest.opacity(0.7))
-            )
-            ctx.fill(
-                wave(in: size, surface: surface, amplitude: 2.6, phase: 0),
-                with: .linearGradient(
-                    Gradient(colors: [waterTop, waterBottom]),
-                    startPoint: CGPoint(x: 0, y: surface),
-                    endPoint: CGPoint(x: 0, y: size.height)
-                )
-            )
-        }
-        .allowsHitTesting(false)
-    }
-
-    /// The body of water: one sine along the top, straight down to the bottom.
-    private func wave(in size: CGSize, surface: CGFloat,
-                      amplitude: CGFloat, phase: Double) -> Path {
-        let steps = 48
-        var path = Path()
-        path.move(to: CGPoint(x: 0, y: surface))
-        for step in 0...steps {
-            let t = Double(step) / Double(steps)
-            let y = surface + amplitude * CGFloat(sin(t * 2 * .pi + phase))
-            path.addLine(to: CGPoint(x: size.width * CGFloat(t), y: y))
-        }
-        path.addLine(to: CGPoint(x: size.width, y: size.height))
-        path.addLine(to: CGPoint(x: 0, y: size.height))
-        path.closeSubpath()
-        return path
     }
 }

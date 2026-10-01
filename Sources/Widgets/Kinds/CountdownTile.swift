@@ -40,24 +40,16 @@ struct CountdownTile: View {
                     if !isRunning { startButton(title: title, size: 9) }
                 }
             } else {
-                HStack(spacing: 10) {
-                    Image(systemName: "timer")
-                        .font(.system(size: 23, weight: .regular))
-                        .foregroundStyle(WidgetStyle.secondary)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(docketClockString(remaining(duration: duration)))
-                            .font(WidgetStyle.value(20))
-                            .monospacedDigit()
-                            .foregroundStyle(WidgetStyle.primary)
-                        Text(title)
-                            .font(WidgetStyle.caption(13))
-                            .foregroundStyle(WidgetStyle.secondary)
-                            .lineLimit(1)
-                            // The glyph takes 24 of the card's 140 while the
-                            // countdown is idle, which is where a long name
-                            // would otherwise have run to.
-                            .minimumScaleFactor(0.8)
-                    }
+                // 140pt is the narrowest card with a badge, so the badge runs
+                // a little smaller here and the reading shrinks to fit rather
+                // than cutting "5:00" to "5:…".
+                // No badge: at 140pt a badge, a reading and the play control
+                // left the name 38pt, which came out as "Countdo…". The
+                // control is the tile's mark here, the way the artwork is
+                // Now Playing's.
+                HStack(spacing: 8) {
+                    TileReading(value: docketClockString(remaining(duration: duration)),
+                                caption: title)
                     Spacer(minLength: 0)
                     if !isRunning { startButton(title: title, size: 12) }
                 }

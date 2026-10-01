@@ -42,17 +42,25 @@ struct BatteryTile: View {
             .lineLimit(1)
         } else {
             // A bottom shelf is a 62pt strip: three stacked rows overflow it
-            // and the caption gets sliced off. Lay it out across instead.
-            HStack(spacing: 7) {
-                symbol
-                VStack(alignment: .leading, spacing: 0) {
-                    percent(reading, size: 24)
-                    Text(caption(reading))
-                        .font(WidgetStyle.caption(11))
-                        .foregroundStyle(WidgetStyle.secondary)
+            // and the caption gets sliced off. Lay it out across instead, as
+            // the shelf's badge and reading: the ring is the level, in white
+            // unless the battery is low enough to earn a colour.
+            HStack(spacing: 10) {
+                TileBadge {
+                    ZStack {
+                        TileRing(progress: reading.present ? reading.level : 0,
+                                 tint: ringTint(reading))
+                        Image(systemName: kind.symbol)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundStyle(reading.present ? WidgetStyle.primary : WidgetStyle.secondary)
+                    }
                 }
+                .overlay(alignment: .bottomTrailing) {
+                    if reading.charging { bolt }
+                }
+                TileReading(value: percentText(reading), caption: caption(reading))
+                Spacer(minLength: 0)
             }
-            .lineLimit(1)
         }
     }
 
@@ -92,6 +100,19 @@ struct BatteryTile: View {
         if reading.level <= 0.10 { return Color(hex: "#FF453A") }
         if reading.level <= 0.20 { return Color(hex: "#FF9F0A") }
         return present
+    }
+
+    /// White while nothing is wrong; the low-battery colours only when they
+    /// mean something.
+    private func ringTint(_ reading: Reading) -> Color {
+        guard reading.present, !reading.charging else { return WidgetStyle.primary }
+        if reading.level <= 0.10 { return Color(hex: "#FF453A") }
+        if reading.level <= 0.20 { return Color(hex: "#FF9F0A") }
+        return WidgetStyle.primary
+    }
+
+    private func percentText(_ reading: Reading) -> String {
+        reading.present ? "\(Int((min(max(reading.level, 0), 1) * 100).rounded()))%" : "-"
     }
 
     private var icons: some View {

@@ -11,28 +11,92 @@ struct BatteryDetail: View {
     var context: WidgetContext
 
     var body: some View {
-        VStack(spacing: 12) {
-            ForEach(devices, id: \.self) { kind in
-                row(device(kind))
+        let kinds = devices
+        // The first device leads, large, and its charge colours the whole
+        // card: green with room, amber getting low, red nearly out. The rest
+        // follow as glass rows.
+        let lead = kinds.first.map(device)
+        DetailCard {
+            MeshBackdrop(color: ground(lead))
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                if let lead { hero(lead) }
+                if kinds.count > 1 {
+                    VStack(spacing: 6) {
+                        ForEach(kinds.dropFirst(), id: \.self) { kind in
+                            row(device(kind))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .glassPane(cornerRadius: 10)
+                        }
+                    }
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         // The panel can list accessories the tile was never configured to
         // show, so it cannot rely on a tile having started the sampler.
         .onAppear { if !context.isPreview { BatteryMetrics.shared.start() } }
+    }
+
+    /// The level as the card's colour. Charging reads as healthy whatever
+    /// the level, since the level is on its way up.
+    private func ground(_ device: BatteryDevice?) -> Color {
+        guard let device, device.present else { return Color(white: 0.3) }
+        if device.charging || device.level > 0.5 { return Color(red: 0.12, green: 0.55, blue: 0.3) }
+        if device.level > 0.2 { return Color(red: 0.75, green: 0.48, blue: 0.08) }
+        return Color(red: 0.72, green: 0.16, blue: 0.14)
+    }
+
+    private func hero(_ device: BatteryDevice) -> some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Label(device.kind.name, systemImage: device.kind.symbol)
+                    .font(WidgetStyle.label(14))
+                    .foregroundStyle(WidgetStyle.primary)
+                if device.present {
+                    let value = Int((min(max(device.level, 0), 1) * 100).rounded())
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Text("\(value)")
+                            .font(.system(size: 60, weight: .light))
+                            .monospacedDigit()
+                            .foregroundStyle(WidgetStyle.primary)
+                            .rollingValue(value)
+                        Text("%")
+                            .font(.system(size: 30, weight: .light))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                } else {
+                    // A dash, never a zero: a device that is not here has no
+                    // level.
+                    Text("-")
+                        .font(.system(size: 60, weight: .light))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                Text(caption(device))
+                    .font(WidgetStyle.label(12))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            Spacer(minLength: 0)
+            if device.charging {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.bottom, 6)
+            }
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
     }
 
     private func row(_ device: BatteryDevice) -> some View {
         HStack(spacing: 12) {
             MetricProgressRing(progress: device.present ? device.level : 0,
                                tint: tint(device),
-                               track: device.present
-                                   ? tint(device).opacity(0.16)
-                                   : Color.primary.opacity(0.10),
-                               diameter: 40,
-                               lineWidth: 4.5) {
+                               track: .white.opacity(0.14),
+                               diameter: 34,
+                               lineWidth: 4) {
                 Image(systemName: device.kind.symbol)
-                    .font(.system(size: 14, weight: .regular))
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(device.present ? tint(device) : WidgetStyle.secondary)
             }
             VStack(alignment: .leading, spacing: 1) {
@@ -110,18 +174,18 @@ struct BatteryDetail: View {
             let value = Int((min(max(device.level, 0), 1) * 100).rounded())
             HStack(spacing: 0) {
                 Text("\(value)")
-                    .font(WidgetStyle.value(24))
+                    .font(WidgetStyle.value(20))
                     .monospacedDigit()
                     .foregroundStyle(WidgetStyle.primary)
                     .rollingValue(value)
                 Text("%")
-                    .font(WidgetStyle.value(24))
+                    .font(WidgetStyle.value(20))
                     .foregroundStyle(WidgetStyle.secondary)
             }
         } else {
             // A dash, never a zero: an accessory that is not here has no level.
             Text("-")
-                .font(WidgetStyle.value(24))
+                .font(WidgetStyle.value(20))
                 .foregroundStyle(WidgetStyle.secondary)
         }
     }

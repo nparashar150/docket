@@ -80,6 +80,12 @@ class HostedWindow {
 final class LibraryWindow: HostedWindow {
     static let shared = LibraryWindow()
 
+    /// Whether the library is up. The shelf stays out while it is: adding a
+    /// widget is done by looking at the shelf it lands on, and an auto-hidden
+    /// shelf slid away the moment the pointer went to the library to pick
+    /// one, so every addition happened somewhere out of sight.
+    var isOpen: Bool { window?.isVisible == true }
+
     func show(app: AppState) {
         present(
             WidgetLibraryView(

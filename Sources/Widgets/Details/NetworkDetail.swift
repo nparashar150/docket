@@ -19,22 +19,24 @@ struct NetworkDetail: View {
     var context: WidgetContext
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            headline
+        // Deep teal, the colour of a line carrying something, with the
+        // minute's traffic as the ground along its foot.
+        DetailCard {
+            MeshBackdrop(color: Color(red: 0.05, green: 0.45, blue: 0.5))
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                headline
 
-            // Two samples is the minimum a line can be drawn from, and the
-            // sampler's first tick is only a baseline - so a panel opened in
-            // the first seconds of the shelf's life honestly shows the rates
-            // alone until the history catches up.
-            if window >= 2 {
-                Divider()
-                history
-
-                Divider()
-                table
+                // Two samples is the minimum a line can be drawn from, and
+                // the sampler's first tick is only a baseline - so a panel
+                // opened in the first seconds of the shelf's life honestly
+                // shows the rates alone until the history catches up.
+                if window >= 2 {
+                    table
+                    history
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Now
@@ -54,7 +56,7 @@ struct NetworkDetail: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(tint)
                 Text(value.value)
-                    .font(WidgetStyle.value(26))
+                    .font(WidgetStyle.value(34))
                     .monospacedDigit()
                     .foregroundStyle(WidgetStyle.primary)
                     .rollingValue(value.value)
@@ -90,7 +92,7 @@ struct NetworkDetail: View {
     /// frame: without a floor the scale collapses onto the noise and a few
     /// stray bytes are drawn as a mountain range.
     private var history: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        ZStack(alignment: .topLeading) {
             ZStack {
                 if showsDownload {
                     DitherChart(samples: downloadHistory, tint: Self.downTint,
@@ -101,14 +103,21 @@ struct NetworkDetail: View {
                                 filled: false, range: scale)
                 }
             }
-            .frame(height: 44)
+            .frame(height: 58)
             .frame(maxWidth: .infinity)
+            .padding(.top, 14)
             // Named with the span the buffer actually holds, which is under a
             // minute until it fills.
-            Text(window >= NetworkMetrics.historyLength ? "Last 60 seconds" : "Last \(window) seconds")
-                .font(WidgetStyle.caption(10))
-                .foregroundStyle(WidgetStyle.secondary)
+            Text((window >= NetworkMetrics.historyLength ? "Last 60 seconds" : "Last \(window) seconds")
+                    .uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(.white.opacity(0.55))
+                .padding(.horizontal, 16)
         }
+        // To the card's edges and foot.
+        .padding(.horizontal, -16)
+        .padding(.bottom, -16)
     }
 
     private var scale: ClosedRange<Double> {
@@ -119,54 +128,26 @@ struct NetworkDetail: View {
     // MARK: Table
 
     /// What the chart's shape cannot be read off it: the level the lines are
-    /// drawn against. The peak names the top of the frame, the average says
-    /// whether a spike was the whole minute or a moment in it, and the dot
-    /// ties each row to its line.
+    /// drawn against. The peak names the top of the frame, and the average
+    /// says whether a spike was the whole minute or a moment in it. Chips,
+    /// two to a direction, in place of a table with a header row.
     private var table: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 8) {
-                Spacer(minLength: 0)
-                heading("Average")
-                heading("Peak")
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
+                            GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            if showsDownload {
+                StatChip(label: "Down average", value: text(average(downloadHistory)))
+                StatChip(label: "Down peak", value: text(peak(downloadHistory)))
             }
-            if showsDownload { row("Download", downloadHistory, Self.downTint) }
-            if showsUpload { row("Upload", uploadHistory, Self.upTint) }
+            if showsUpload {
+                StatChip(label: "Up average", value: text(average(uploadHistory)))
+                StatChip(label: "Up peak", value: text(peak(uploadHistory)))
+            }
         }
     }
 
-    private static let column: CGFloat = 78
-
-    private func heading(_ text: String) -> some View {
-        Text(text)
-            .font(WidgetStyle.caption(10))
-            .foregroundStyle(WidgetStyle.secondary)
-            .frame(width: Self.column, alignment: .trailing)
-    }
-
-    private func row(_ name: String, _ series: [Double], _ tint: Color) -> some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(tint)
-                .frame(width: 6, height: 6)
-            Text(name)
-                .font(WidgetStyle.caption(11))
-                .foregroundStyle(WidgetStyle.secondary)
-            Spacer(minLength: 0)
-            figure(average(series))
-            figure(peak(series))
-        }
-        .lineLimit(1)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func figure(_ rate: Double) -> some View {
+    private func text(_ rate: Double) -> String {
         let value = formatted(rate)
-        return Text("\(value.value) \(value.unit)")
-            .font(WidgetStyle.label(11))
-            .monospacedDigit()
-            .foregroundStyle(WidgetStyle.primary)
-            .frame(width: Self.column, alignment: .trailing)
-            .rollingValue(value.value)
+        return "\(value.value) \(value.unit)"
     }
 
     private func average(_ series: [Double]) -> Double {

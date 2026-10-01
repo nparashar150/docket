@@ -10,21 +10,19 @@ struct AirDropTile: View {
         // caption, just sized for 56pt of usable width.
         let column = context.position.isVertical
         return WidgetSurface {
+            // Stacked, not side by side: at 100pt wide there is no room for a
+            // badge and a reading in a row. The badge is the shelf's neutral
+            // glass, not Apple's blue app icon, which was the only saturated
+            // block on an otherwise quiet shelf.
             VStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(
-                        LinearGradient(colors: [Color(hex: "#3FA9FF"), Color(hex: "#0A7CFF")],
-                                       startPoint: .top, endPoint: .bottom)
-                    )
-                    .frame(width: column ? 32 : 34, height: column ? 32 : 34)
-                    .overlay {
-                        // SF Symbols has no AirDrop glyph; this is the closest.
-                        Image(systemName: "dot.radiowaves.up.forward")
-                            .font(.system(size: column ? 16 : 17, weight: .medium))
-                            .foregroundStyle(.white)
-                    }
+                TileBadge(size: column ? 32 : 36) {
+                    // SF Symbols has no AirDrop glyph; this is the closest.
+                    Image(systemName: "dot.radiowaves.up.forward")
+                        .font(.system(size: column ? 15 : 16, weight: .medium))
+                        .foregroundStyle(WidgetStyle.primary)
+                }
                 Text("AirDrop")
-                    .font(WidgetStyle.label(column ? 12 : 15))
+                    .font(.system(size: column ? 12 : 13, weight: .semibold))
                     .foregroundStyle(WidgetStyle.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)

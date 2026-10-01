@@ -85,7 +85,7 @@ struct StockTile: View {
             // Fixed only when there is a chart to give the rest of the width
             // to. Without one the readout should spread rather than sit in a
             // column with empty space beside it.
-            readout(ticker: 11, price: 18, percent: 11, fixed: showsChart)
+            readout(ticker: 11, price: 19, percent: 11, fixed: showsChart)
             if showsChart { chart.frame(maxWidth: .infinity, maxHeight: 32) }
         }
     }
@@ -111,7 +111,7 @@ struct StockTile: View {
         VStack(alignment: .leading, spacing: 1) {
             tickerRow(ticker)
             Text(quote?.priceText ?? "-")
-                .font(WidgetStyle.value(price))
+                .font(.system(size: price, weight: .semibold))
                 .foregroundStyle(WidgetStyle.primary)
                 .monospacedDigit()
             Text(quote?.percentText ?? "")
@@ -167,13 +167,17 @@ struct StockTile: View {
 
 /// Gain green and loss red, picked for contrast against the tile in each
 /// appearance rather than left to one system swatch that goes muddy in the
-/// other. Shared with the Watchlist tile.
+/// other. Shared with the Watchlist tile and the panel.
+///
+/// Muted in the dark: the system's signal green and red were the brightest
+/// things on the shelf, louder than the figures they qualify. These keep the
+/// meaning at a glance and sit with the neutral cards.
 enum StockInk {
     static func accent(rising: Bool, scheme: ColorScheme) -> Color {
         if rising {
-            Color(hex: scheme == .dark ? "#30D158" : "#0D7533")
+            Color(hex: scheme == .dark ? "#6CC18A" : "#0D7533")
         } else {
-            Color(hex: scheme == .dark ? "#FF757D" : "#C7212B")
+            Color(hex: scheme == .dark ? "#E0858B" : "#C7212B")
         }
     }
 }

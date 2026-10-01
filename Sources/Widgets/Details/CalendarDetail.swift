@@ -42,11 +42,16 @@ struct CalendarDetail: View {
     private var day: Date { Calendar.current.startOfDay(for: context.now) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            heading
-            if granted { agenda } else { permission }
+        // Calendar red, the colour of the date on a desk calendar's tear-off
+        // page, with the date itself as the headline.
+        DetailCard {
+            MeshBackdrop(color: Color(red: 0.78, green: 0.2, blue: 0.22))
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                heading
+                if granted { agenda } else { permission }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { load() }
         // The chrome swaps its root view rather than rebuilding it, so this
         // view survives being reopened on another widget: the day has to be
@@ -62,11 +67,24 @@ struct CalendarDetail: View {
 
     // MARK: Heading
 
+    /// The day's number large, the weekday and month beside it: the page of
+    /// a desk calendar rather than a heading that says "Today".
     private var heading: some View {
-        HStack(spacing: 8) {
-            Text("Today")
-                .font(WidgetStyle.label(13))
+        HStack(alignment: .center, spacing: 12) {
+            Text(day.formatted(.dateTime.day()))
+                .font(.system(size: 52, weight: .light))
+                .monospacedDigit()
                 .foregroundStyle(WidgetStyle.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(day.formatted(.dateTime.weekday(.wide)).uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(.white.opacity(0.8))
+                Text(day.formatted(.dateTime.month(.wide).year()))
+                    .font(WidgetStyle.label(14))
+                    .foregroundStyle(WidgetStyle.primary)
+            }
+            .lineLimit(1)
             Spacer(minLength: 12)
             // Nothing to choose between with one calendar, and no filter to
             // offer without access - a button that opens an empty menu reads
@@ -89,8 +107,11 @@ struct CalendarDetail: View {
             }
         } label: {
             Text("Calendars…")
-                .font(WidgetStyle.caption(12))
-                .foregroundStyle(WidgetStyle.secondary)
+                .font(WidgetStyle.label(11))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.white.opacity(0.14), in: .capsule)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -105,10 +126,13 @@ struct CalendarDetail: View {
 
         if timed.isEmpty, allDay.isEmpty {
             Text("Nothing scheduled today.")
-                .font(WidgetStyle.caption(12))
-                .foregroundStyle(WidgetStyle.secondary)
+                .font(WidgetStyle.label(13))
+                .foregroundStyle(.white.opacity(0.8))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .glassPane()
         } else {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 // Time first, calendar second: two events at 10:30 are told
                 // apart by the calendar, never the other way round.
                 ForEach(timed) { event in
@@ -118,10 +142,11 @@ struct CalendarDetail: View {
             if !allDay.isEmpty {
                 // Below the timed events, not mixed into them: an all-day
                 // entry has no place in a list ordered by time.
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("All day")
-                        .font(WidgetStyle.caption(11))
-                        .foregroundStyle(WidgetStyle.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("ALL DAY")
+                        .font(.system(size: 9, weight: .semibold))
+                        .tracking(0.6)
+                        .foregroundStyle(.white.opacity(0.6))
                     ForEach(allDay) { event in
                         row(event, detail: event.calendar)
                     }
@@ -132,23 +157,25 @@ struct CalendarDetail: View {
     }
 
     private func row(_ event: DayEvent, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 9) {
-            Circle()
+        HStack(alignment: .center, spacing: 10) {
+            // The calendar's own colour as a bar down the row's edge, the
+            // way the system's calendar marks an event.
+            Capsule()
                 .fill(event.color)
-                .frame(width: 7, height: 7)
-                // Aligned to the cap of the title rather than the middle of a
-                // two-line block.
-                .padding(.top, 4)
+                .frame(width: 3.5, height: 28)
             VStack(alignment: .leading, spacing: 1) {
                 Text(event.title)
                     .font(WidgetStyle.label(13))
                     .foregroundStyle(WidgetStyle.primary)
                 Text(detail)
                     .font(WidgetStyle.caption(11))
-                    .foregroundStyle(WidgetStyle.secondary)
+                    .foregroundStyle(.white.opacity(0.7))
             }
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .glassPane(cornerRadius: 10)
         // Truncated rather than wrapped: the panel is sized once when it
         // opens, so a second line would be clipped by the window.
         .lineLimit(1)
@@ -166,7 +193,7 @@ struct CalendarDetail: View {
                  ? "Docket has not been given access to your calendar."
                  : "Calendar access is off for Docket.")
                 .font(WidgetStyle.caption(12))
-                .foregroundStyle(WidgetStyle.secondary)
+                .foregroundStyle(.white.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
             // Once the answer is no, asking again returns it unchanged with no
             // prompt on screen, so the only button worth drawing is the one
@@ -187,10 +214,10 @@ struct CalendarDetail: View {
         } label: {
             Text(title)
                 .font(WidgetStyle.label(13))
-                .foregroundStyle(WidgetStyle.primary)
+                .foregroundStyle(.white)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(WidgetStyle.primary.opacity(0.1)))
+                .padding(.vertical, 7)
+                .background(Capsule().fill(.white.opacity(0.14)))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

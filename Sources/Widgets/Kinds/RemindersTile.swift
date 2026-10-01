@@ -115,7 +115,7 @@ struct RemindersTile: View {
             Spacer(minLength: 6)
             Text(stamp(item))
                 .font(WidgetStyle.caption(10))
-                .foregroundStyle(late ? Self.overdue : WidgetStyle.secondary)
+                .foregroundStyle(WidgetStyle.secondary)
                 .monospacedDigit()
         }
         .lineLimit(1)
@@ -127,27 +127,31 @@ struct RemindersTile: View {
     private var wideNext: some View {
         let item = ordered[0]
         let late = item.isOverdue(context.now)
-        return HStack(spacing: 9) {
-            Image(systemName: late ? "exclamationmark.circle.fill" : "checklist")
-                .font(.system(size: 22))
-                .foregroundStyle(late ? Self.overdue : Self.accent)
-                .frame(height: 22)
+        // The shelf's badge and reading. Overdue is said by the glyph in
+        // the badge, small and red, rather than by colouring the words: red
+        // text was the loudest thing on the shelf.
+        return HStack(spacing: 10) {
+            TileBadge {
+                Image(systemName: late ? "exclamationmark.circle.fill" : "checklist")
+                    .font(.system(size: 17))
+                    .foregroundStyle(late ? Self.overdue : WidgetStyle.primary)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     Text(item.title)
-                        .font(WidgetStyle.label(14))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(WidgetStyle.primary)
                     // Reminders.app's own flag, and the only ranking EventKit
                     // gives that a due-date sort throws away.
                     if item.isHighPriority {
                         Text("!")
                             .font(WidgetStyle.label(14))
-                            .foregroundStyle(Self.overdue)
+                            .foregroundStyle(WidgetStyle.secondary)
                     }
                 }
                 Text(detail(item))
-                    .font(WidgetStyle.caption(11))
-                    .foregroundStyle(late ? Self.overdue : WidgetStyle.secondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(WidgetStyle.secondary)
             }
             Spacer(minLength: 0)
         }
@@ -166,12 +170,12 @@ struct RemindersTile: View {
     private var count: some View {
         if overdueCount > 0 && todayCount > 0 {
             VStack(alignment: .leading, spacing: 1) {
-                countRow(overdueCount, "overdue", tint: Self.overdue)
+                countRow(overdueCount, "overdue", tint: WidgetStyle.primary)
                 countRow(todayCount, "today", tint: WidgetStyle.primary)
             }
             .frame(maxWidth: .infinity)
         } else if overdueCount > 0 {
-            bigCount(overdueCount, "overdue", tint: Self.overdue)
+            bigCount(overdueCount, "overdue", tint: WidgetStyle.primary)
         } else {
             bigCount(todayCount, "due today", tint: WidgetStyle.primary)
         }
@@ -262,7 +266,7 @@ struct RemindersTile: View {
                 .lineLimit(2)
             Text(stamp(item))
                 .font(WidgetStyle.caption(10))
-                .foregroundStyle(late ? Self.overdue : WidgetStyle.secondary)
+                .foregroundStyle(WidgetStyle.secondary)
                 .lineLimit(1)
                 .monospacedDigit()
         }

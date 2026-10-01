@@ -94,22 +94,16 @@ struct FocusTimerTile: View {
                     toggleButton(running: running, size: 10)
                 }
             } else if instance.expanded {
-                HStack(spacing: 12) {
-                    ring(fraction: remaining / total, tint: tint, diameter: 32, width: 7)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(docketClockString(remaining))
-                            .font(WidgetStyle.value(23))
-                            .monospacedDigit()
-                            .foregroundStyle(WidgetStyle.primary)
-                            // A 180-minute session reads 3:00:00, which no
-                            // longer has the glyph's 24pt to spread into.
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                        Text(state.phase.label)
-                            .font(WidgetStyle.caption(14))
-                            .foregroundStyle(WidgetStyle.secondary)
-                            .lineLimit(1)
+                HStack(spacing: 10) {
+                    // The session's colour as the ring and nothing else, and
+                    // muted at that: the badge is neutral like every other
+                    // tile's, and the colour is an accent on it. A 180-minute
+                    // session reads 3:00:00, which TileReading shrinks to fit.
+                    TileBadge {
+                        TileRing(progress: remaining / total,
+                                 tint: tint.mix(with: WidgetStyle.primary, by: 0.25))
                     }
+                    TileReading(value: docketClockString(remaining), caption: state.phase.label)
                     Spacer(minLength: 0)
                     toggleButton(running: running, size: 12)
                 }

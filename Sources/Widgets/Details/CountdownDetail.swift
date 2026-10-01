@@ -34,40 +34,64 @@ struct CountdownDetail: View {
         let left = remaining(duration: total, now: now)
         let running = isRunning(now: now)
 
-        return VStack(spacing: 16) {
-            VStack(spacing: 4) {
-                Text(docketClockString(left))
-                    .font(WidgetStyle.value(52))
-                    .monospacedDigit()
-                    .foregroundStyle(WidgetStyle.primary)
-                    .rollingValue(Int(left.rounded(.up)))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Text(caption(running: running, duration: total))
-                    .font(WidgetStyle.caption(12))
-                    .foregroundStyle(WidgetStyle.secondary)
-                    .lineLimit(1)
-            }
+        let fraction = total > 0 ? left / total : 0
 
-            HStack(spacing: 10) {
-                // Restarting in flight throws away time already run, which is
-                // why the tile keeps it off the card and the panel carries it.
-                ClockPanelButton(title: running ? "Restart" : "Start",
-                                 fill: .accentColor) { start(duration: total) }
-                ClockPanelButton(title: "Cancel", fill: nil, action: cancel)
-                    .disabled(deadline == nil)
-                    .opacity(deadline == nil ? 0.4 : 1)
-            }
+        // The time left inside a ring that empties as it runs, on the
+        // countdown's own colour.
+        return DetailCard {
+            MeshBackdrop(color: accent)
+        } content: {
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .stroke(.white.opacity(0.12), lineWidth: 5)
+                    Circle()
+                        .trim(from: 0, to: min(1, max(0, fraction)))
+                        .stroke(.white.opacity(0.8), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    VStack(spacing: 2) {
+                        Text(docketClockString(left))
+                            .font(.system(size: 40, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(WidgetStyle.primary)
+                            .rollingValue(Int(left.rounded(.up)))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                        Text(caption(running: running, duration: total))
+                            .font(WidgetStyle.label(11))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .padding(.horizontal, 22)
+                }
+                .frame(width: 176, height: 176)
+                .frame(maxWidth: .infinity)
 
-            HStack(spacing: 6) {
-                ForEach(presets, id: \.self) { minutes in
-                    preset(minutes,
-                           active: Int((total / 60).rounded()) == minutes,
-                           now: now)
+                HStack(spacing: 10) {
+                    // Restarting in flight throws away time already run, which is
+                    // why the tile keeps it off the card and the panel carries it.
+                    ClockPanelButton(title: running ? "Restart" : "Start",
+                                     fill: .white.opacity(0.24), ink: .white) { start(duration: total) }
+                    ClockPanelButton(title: "Cancel", fill: nil, action: cancel)
+                        .disabled(deadline == nil)
+                        .opacity(deadline == nil ? 0.4 : 1)
+                }
+
+                HStack(spacing: 6) {
+                    ForEach(presets, id: \.self) { minutes in
+                        preset(minutes,
+                               active: Int((total / 60).rounded()) == minutes,
+                               now: now)
+                    }
                 }
             }
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    /// The countdown's catalog colour, the one its tile is drawn in.
+    private var accent: Color {
+        Color(hex: WidgetCatalog.accentHex(.countdown) ?? PaletteColor.indigo.hex)
     }
 
     // MARK: Pieces
@@ -75,12 +99,11 @@ struct CountdownDetail: View {
     private func preset(_ minutes: Int, active: Bool, now: Date) -> some View {
         Button { pick(minutes, now: now) } label: {
             Text("\(minutes) min")
-                .font(WidgetStyle.caption(11))
-                .foregroundStyle(active ? .white : WidgetStyle.secondary)
+                .font(WidgetStyle.label(11))
+                .foregroundStyle(.white.opacity(active ? 1 : 0.75))
                 .frame(maxWidth: .infinity)
                 .frame(height: 26)
-                .background(Capsule().fill(active ? Color.accentColor
-                                                  : Color.primary.opacity(0.06)))
+                .background(Capsule().fill(Color.white.opacity(active ? 0.28 : 0.1)))
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
