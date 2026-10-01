@@ -31,7 +31,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="$ROOT/docs/images"
+# SHOTS_OUT sends the images somewhere other than the README's folder, for
+# looking at a change before it replaces what is published.
+OUT_DIR="${SHOTS_OUT:-$ROOT/docs/images}"
 DERIVED="${TMPDIR:-/tmp}/docket-shots-build"
 
 fail() { printf 'capture-shots: %s\n' "$1" >&2; exit 1; }
@@ -107,7 +109,7 @@ wait "$SHOTS_PID" || fail "the Shots tool exited badly; nothing further was capt
 SHOTS_PID=""
 
 echo
-echo "capture-shots: wrote ${#WRITTEN[@]} image(s) to docs/images/"
+echo "capture-shots: wrote ${#WRITTEN[@]} image(s) to $OUT_DIR/"
 NOT_LIVE=0
 for entry in "${WRITTEN[@]:-}"; do
   [ -n "$entry" ] || continue
@@ -120,7 +122,7 @@ for entry in "${WRITTEN[@]:-}"; do
   read -r pw ph < <(sips -g pixelWidth -g pixelHeight "$OUT_DIR/$name.png" 2>/dev/null \
                     | awk '$1=="pixelWidth:"{w=$2} $1=="pixelHeight:"{h=$2}
                            END{if (w ~ /^[0-9]+$/ && h ~ /^[0-9]+$/) print w, h}') || true
-  printf '  docs/images/%-22s %8sx%-8s %s\n' "$name.png" "${pw:-?}" "${ph:-?}" "$source"
+  printf '  %-34s %8sx%-8s %s\n' "$name.png" "${pw:-?}" "${ph:-?}" "$source"
 done
 
 if [ "$NOT_LIVE" -gt 0 ]; then

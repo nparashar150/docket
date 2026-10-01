@@ -553,7 +553,12 @@ private func run() async {
     // screen before the first surface is placed over it.
     try? await Task.sleep(for: settle)
 
-    for shot in shots(since: started) {
+    // SHOTS_ONLY=clock,weather retakes just those, for iterating on a few
+    // panels without sitting through every network wait. Unset, all of them.
+    let only = ProcessInfo.processInfo.environment["SHOTS_ONLY"]
+        .map { Set($0.split(separator: ",").map(String.init)) }
+
+    for shot in shots(since: started) where only?.contains(shot.name) ?? true {
         await shot.prepare()
         guard let window = makePanel(shot, on: screen) else { continue }
         try? await Task.sleep(for: settle)
@@ -567,7 +572,9 @@ private func run() async {
 
     // Last, so every service the shelf's tiles read - the metrics sampler
     // above all - has been running for the whole session by the time it draws.
-    await captureShelf(on: screen)
+    if only?.contains("shelf-showcase") ?? true {
+        await captureShelf(on: screen)
+    }
 
     backdrop.orderOut(nil)
     log("done")
@@ -600,5 +607,79 @@ private func captureShelf(on screen: NSScreen) async {
 let app = NSApplication.shared
 // No Dock tile and no menu bar for a tool that exists for about a minute.
 app.setActivationPolicy(.accessory)
-Task { @MainActor in await run() }
+/// SHOTS_RENDER=<dir> renders each panel's body offscreen to <dir>/<name>.png
+/// instead of photographing the screen.
+///
+/// Only honest for surfaces that are opaque: the card every panel now sits on
+/// is, the popover material around it is not and comes out transparent. It
+/// needs no Screen Recording permission and no display, so it is how a panel
+/// is looked at while those are unavailable, never what the README uses.
+@MainActor
+private func render(to directory: String) async {
+    try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+    SystemMetrics.shared.start()
+    let only = ProcessInfo.processInfo.environment["SHOTS_ONLY"]
+        .map { Set($0.split(separator: ",").map(String.init)) }
+    for shot in shots(since: Date()) where only?.contains(shot.name) ?? true {
+        await shot.prepare()
+        let context = WidgetContext(position: .bottom, now: .now, isPreview: shot.isPreview)
+        let view = WidgetDetailBody(instance: shot.instance, context: context)
+            .padding(16)
+            .frame(width: WidgetDetail.width(shot.instance.kind), alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(Color(white: 0.16))
+            .environment(\.colorScheme, .dark)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        guard let image = renderer.cgImage,
+              let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        else { log("\(shot.name): nothing rendered"); continue }
+        let url = URL(fileURLWithPath: directory).appendingPathComponent("\(shot.name).png")
+        try? data.write(to: url)
+        print("\(shot.name) \(image.width)x\(image.height)")
+    }
+    exit(0)
+}
+
+/// SHOTS_TILES=<dir> renders every tile kind with its own sample data, on a
+/// plate the shelf's colour, into one sheet: for looking at the tiles side by
+/// side while the screen cannot be captured.
+@MainActor
+private func renderTiles(to directory: String) {
+    try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+    let context = WidgetContext(position: .bottom, now: .now, isPreview: true)
+    let kinds = WidgetKind.allCases.filter { WidgetCatalog.make($0) != nil }
+    let sheet = VStack(alignment: .leading, spacing: 14) {
+        ForEach(kinds, id: \.self) { kind in
+            HStack(spacing: 12) {
+                Text(kind.rawValue)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(width: 80, alignment: .trailing)
+                WidgetTile(instance: widget(kind), context: context)
+            }
+        }
+    }
+    .padding(20)
+    .background(Color(red: 0.12, green: 0.12, blue: 0.14))
+    .environment(\.colorScheme, .dark)
+    let renderer = ImageRenderer(content: sheet)
+    renderer.scale = 2
+    if let image = renderer.cgImage,
+       let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+        try? data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("tiles.png"))
+        print("tiles \(image.width)x\(image.height)")
+    }
+    exit(0)
+}
+
+Task { @MainActor in
+    if let directory = ProcessInfo.processInfo.environment["SHOTS_TILES"] {
+        renderTiles(to: directory)
+    } else if let directory = ProcessInfo.processInfo.environment["SHOTS_RENDER"] {
+        await render(to: directory)
+    } else {
+        await run()
+    }
+}
 app.run()
