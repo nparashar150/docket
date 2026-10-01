@@ -29,49 +29,61 @@ struct ShortcutDetail: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
-            outcome
-            chooser
-            HStack(spacing: 8) {
-                button("Open Shortcuts", fill: Self.accent, label: .white, action: openShortcuts)
-                if !chosen.isEmpty {
-                    button("Clear", fill: nil, label: WidgetStyle.primary) {
-                        WidgetWriter.write(instance) { $0.set("name", .string("")) }
+        // The widget's own violet. A shortcut carries a colour in Shortcuts,
+        // but the tool that lists them names them and nothing else, so the
+        // card cannot borrow it.
+        DetailCard {
+            MeshBackdrop(color: Self.accent)
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                outcome
+                chooser
+                HStack(spacing: 8) {
+                    button("Open Shortcuts", fill: .white.opacity(0.24), label: .white, action: openShortcuts)
+                    if !chosen.isEmpty {
+                        button("Clear", fill: .white.opacity(0.14), label: .white) {
+                            WidgetWriter.write(instance) { $0.set("name", .string("")) }
+                        }
                     }
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .task { await service.load() }
     }
 
     // MARK: Pieces
 
+    /// The shortcut's name as the headline, and run as the one big control:
+    /// a white disc that is the point of the widget.
     private var header: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Self.accent.opacity(chosen.isEmpty ? 0.18 : 1))
-                .frame(width: 34, height: 34)
-                .overlay {
-                    Image(systemName: running ? "stop.fill" : "play.fill")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(chosen.isEmpty ? WidgetStyle.secondary : .white)
-                }
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(running ? "RUNNING" : chosen.isEmpty ? "PICK ONE BELOW" : "READY")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(.white.opacity(0.6))
                 Text(chosen.isEmpty ? "No shortcut chosen" : chosen)
-                    .font(WidgetStyle.label(15))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(WidgetStyle.primary)
-                    .lineLimit(1)
-                Text(running ? "Running" : chosen.isEmpty ? "Pick one below" : "Ready")
-                    .font(WidgetStyle.caption(11))
-                    .foregroundStyle(WidgetStyle.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
             }
             Spacer(minLength: 0)
             if !chosen.isEmpty {
-                TileGlyph(symbol: running ? "stop.fill" : "play.fill", size: 12) {
+                Button {
                     if running { service.stop() } else { service.run(chosen) }
+                } label: {
+                    Image(systemName: running ? "stop.fill" : "play.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .offset(x: running ? 0 : 1.5)
+                        .frame(width: 48, height: 48)
+                        .background(.white.opacity(0.24), in: .circle)
+                        .contentShape(.circle)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(running ? "Stop" : "Run")
             }
         }
     }
@@ -98,16 +110,18 @@ struct ShortcutDetail: View {
         } else if service.names.isEmpty {
             note("You have no shortcuts yet. Make one in Shortcuts and it will appear here.", tint: nil)
         } else {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(service.names.prefix(Self.visibleRows), id: \.self) { name in
                     row(name)
                 }
                 if service.names.count > Self.visibleRows {
                     Text("and \(service.names.count - Self.visibleRows) more, in Shortcuts")
                         .font(WidgetStyle.caption(10))
-                        .foregroundStyle(WidgetStyle.secondary)
+                        .foregroundStyle(.white.opacity(0.6))
                 }
             }
+            .padding(10)
+            .glassPane()
         }
     }
 
@@ -118,7 +132,7 @@ struct ShortcutDetail: View {
             HStack(spacing: 6) {
                 Image(systemName: name == chosen ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 11))
-                    .foregroundStyle(name == chosen ? Self.accent : WidgetStyle.secondary)
+                    .foregroundStyle(name == chosen ? Color.white : .white.opacity(0.5))
                 Text(name)
                     .font(WidgetStyle.label(12))
                     .foregroundStyle(WidgetStyle.primary)
@@ -133,22 +147,20 @@ struct ShortcutDetail: View {
     private func note(_ text: String, tint: Color?) -> some View {
         Text(text)
             .font(WidgetStyle.caption(11))
-            .foregroundStyle(tint ?? WidgetStyle.secondary)
+            .foregroundStyle(tint ?? .white.opacity(0.7))
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func button(_ title: String, fill: Color?, label: Color,
+    private func button(_ title: String, fill: Color, label: Color,
                         action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(WidgetStyle.label(12))
                 .foregroundStyle(label)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(fill ?? WidgetStyle.primary.opacity(0.12))
-                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(fill, in: .capsule)
+                .contentShape(.capsule)
         }
         .buttonStyle(.plain)
     }

@@ -29,24 +29,26 @@ struct WorldClockDetail: View {
         // frozen date would leave the seconds and the strip standing still.
         TimelineView(.periodic(from: .now, by: 1)) { tick in
             let now = tick.date
-            VStack(alignment: .leading, spacing: 12) {
-                headline(now)
+            // Their sky, not ours: the card is the time of day in the city.
+            DetailCard {
+                SkyBackdrop(date: now, zone: zone)
+            } content: {
+                VStack(alignment: .leading, spacing: 14) {
+                    headline(now)
+                        .padding(.top, 18)
 
-                Divider()
+                    HStack(spacing: 8) {
+                        StatChip(label: "Here", value: ClockFormat.time(now, zone: .current))
+                            .frame(width: 88)
+                        StatChip(label: "Difference",
+                                 value: ClockPanelFormat.difference(zone, at: now))
+                    }
 
-                VStack(spacing: 6) {
-                    ClockPanelRow(label: "Here", value: ClockFormat.time(now, zone: .current))
-                    ClockPanelRow(label: "Difference",
-                                  value: ClockPanelFormat.difference(zone, at: now))
-                    ClockPanelRow(label: "Time zone",
-                                  value: ClockPanelFormat.zoneName(zone, at: now))
+                    strip(now)
+                        .padding(10)
+                        .glassPane()
                 }
-
-                Divider()
-
-                strip(now)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -55,9 +57,9 @@ struct WorldClockDetail: View {
     private func headline(_ now: Date) -> some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                ClockPanelTime(now: now, zone: zone, size: 30)
+                ClockPanelTime(now: now, zone: zone, size: 40)
                 Text(city)
-                    .font(WidgetStyle.label(13))
+                    .font(WidgetStyle.label(15))
                     .foregroundStyle(WidgetStyle.primary)
                 // The tile's own "Tomorrow" / "Yesterday", against a date the
                 // tile only ever has room to abbreviate.
@@ -70,9 +72,6 @@ struct WorldClockDetail: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             Spacer(minLength: 0)
-            Image(systemName: Self.isDaylight(now, zone: zone) ? "sun.max.fill" : "moon.stars.fill")
-                .symbolRenderingMode(.multicolor)
-                .font(.system(size: 20))
         }
     }
 
@@ -83,7 +82,7 @@ struct WorldClockDetail: View {
     /// Read as a pair of rows it answers the only question the tile provokes:
     /// what time is it there when it is a reasonable hour here.
     private func strip(_ now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 2) {
                 ForEach(Self.hours(from: now), id: \.self) { hour in
                     VStack(spacing: 3) {
@@ -98,7 +97,7 @@ struct WorldClockDetail: View {
                             .background {
                                 RoundedRectangle(cornerRadius: 5, style: .continuous)
                                     .fill(Self.isDaylight(hour, zone: zone)
-                                          ? Color.primary.opacity(0.10) : .clear)
+                                          ? Color(red: 1, green: 0.85, blue: 0.5).opacity(0.22) : .clear)
                             }
                     }
                     .monospacedDigit()

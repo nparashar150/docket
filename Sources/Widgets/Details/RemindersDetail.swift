@@ -72,18 +72,22 @@ struct RemindersDetail: View {
         let overdue = rows.filter { $0.isOverdue(now) }
         let today = rows.filter { !$0.isOverdue(now) }
 
-        VStack(alignment: .leading, spacing: 12) {
-            if granted {
-                summary(overdue: overdue.count, today: today.count)
-                if !rows.isEmpty {
-                    Divider()
-                    list(overdue: overdue, today: today)
+        // Red once anything is late, the widget's own colour otherwise: the
+        // card says whether you are behind before a title is read.
+        DetailCard {
+            MeshBackdrop(color: overdue.isEmpty ? Self.fallbackTint : Color(hex: PaletteColor.red.hex))
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                if granted {
+                    summary(overdue: overdue.count, today: today.count)
+                    if !rows.isEmpty {
+                        list(overdue: overdue, today: today)
+                    }
+                } else {
+                    permission
                 }
-            } else {
-                permission
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Summary
@@ -91,33 +95,35 @@ struct RemindersDetail: View {
     /// The two counts, which is what the sections below cannot say once the
     /// list is cut off at `visibleRows`.
     private func summary(overdue: Int, today: Int) -> some View {
-        HStack(spacing: 8) {
-            if rows.isEmpty {
-                Text("Nothing due today.")
-                    .font(WidgetStyle.label(13))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(rows.count)")
+                    .font(.system(size: 56, weight: .semibold, design: .rounded))
                     .foregroundStyle(WidgetStyle.primary)
-            } else {
-                if overdue > 0 {
-                    Text("\(overdue) overdue")
-                        .font(WidgetStyle.label(13))
-                        .foregroundStyle(Color(hex: PaletteColor.red.hex))
-                }
-                if today > 0 {
-                    Text("\(today) due today")
-                        .font(WidgetStyle.label(13))
-                        .foregroundStyle(WidgetStyle.primary)
+                    .monospacedDigit()
+                    .rollingValue(rows.count)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(rows.isEmpty ? "Nothing due today" : "due by tonight")
+                        .font(WidgetStyle.label(14))
+                        .foregroundStyle(.white.opacity(0.85))
+                    // Which list this is a view of, when it is not all of them
+                    // - otherwise the count reads as the whole account and is
+                    // not.
+                    if !listFilter.isEmpty {
+                        Text(listFilter)
+                            .font(WidgetStyle.caption(11))
+                            .foregroundStyle(.white.opacity(0.65))
+                    }
                 }
             }
-            Spacer(minLength: 8)
-            // Which list this is a view of, when it is not all of them -
-            // otherwise the counts read as the whole account and are not.
-            if !listFilter.isEmpty {
-                Text(listFilter)
-                    .font(WidgetStyle.caption(11))
-                    .foregroundStyle(WidgetStyle.secondary)
+            .lineLimit(1)
+            if !rows.isEmpty {
+                HStack(spacing: 8) {
+                    StatChip(label: "Overdue", value: "\(overdue)")
+                    StatChip(label: "Today", value: "\(today)")
+                }
             }
         }
-        .lineLimit(1)
     }
 
     // MARK: List
@@ -135,9 +141,9 @@ struct RemindersDetail: View {
         let shownToday = Array(today.prefix(max(0, Self.visibleRows - shownOverdue.count)))
         let hidden = rows.count - shownOverdue.count - shownToday.count
 
-        VStack(alignment: .leading, spacing: 10) {
-            section("Overdue", shownOverdue, tint: Color(hex: PaletteColor.red.hex))
-            section("Today", shownToday, tint: WidgetStyle.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            section("Overdue", shownOverdue, tint: .white)
+            section("Today", shownToday, tint: .white.opacity(0.7))
             if hidden > 0 {
                 Text("\(hidden) more in Reminders")
                     .font(WidgetStyle.caption(11))
@@ -149,9 +155,10 @@ struct RemindersDetail: View {
     @ViewBuilder
     private func section(_ title: String, _ items: [DueReminder], tint: Color) -> some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .font(WidgetStyle.caption(11))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
                     .foregroundStyle(tint)
                 ForEach(items) { item in
                     row(item)
@@ -177,7 +184,7 @@ struct RemindersDetail: View {
                     if item.isHighPriority {
                         Text("!")
                             .font(WidgetStyle.label(13))
-                            .foregroundStyle(Color(hex: PaletteColor.red.hex))
+                            .foregroundStyle(Color(hex: PaletteColor.orange.hex))
                     }
                 }
                 Text(detail(item))
@@ -189,6 +196,9 @@ struct RemindersDetail: View {
         // Truncated rather than wrapped: the panel is sized once when it
         // opens, so a second line would be clipped by the window.
         .lineLimit(1)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .glassPane(cornerRadius: 10)
         .accessibilityElement(children: .combine)
     }
 
@@ -203,7 +213,7 @@ struct RemindersDetail: View {
         let day = Calendar.current.isDateInToday(item.due)
             ? ""
             : item.due.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " "
-        return item.list.isEmpty ? day + when : "\(day)\(when) · \(item.list)"
+        return item.list.isEmpty ? day + when : "\(day)\(when), \(item.list)"
     }
 
     // MARK: No access
@@ -235,10 +245,10 @@ struct RemindersDetail: View {
         } label: {
             Text(title)
                 .font(WidgetStyle.label(13))
-                .foregroundStyle(WidgetStyle.primary)
+                .foregroundStyle(.white)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(WidgetStyle.primary.opacity(0.1)))
+                .padding(.vertical, 7)
+                .background(Capsule().fill(.white.opacity(0.14)))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

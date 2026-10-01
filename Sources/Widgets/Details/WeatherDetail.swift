@@ -18,28 +18,35 @@ struct WeatherDetail: View {
     var context: WidgetContext
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if city.isEmpty {
-                noPlace
-            } else if let weather {
-                now(weather)
-            } else {
-                unavailable
-            }
+        // The condition's own sky, with its symbol as the light source.
+        DetailCard {
+            WeatherBackdrop(symbol: weather?.symbolName ?? "cloud.fill")
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                if city.isEmpty {
+                    noPlace
+                } else if let weather {
+                    now(weather)
+                } else {
+                    unavailable
+                }
 
-            if !hours.isEmpty {
-                Divider()
-                strip
-                range
-            }
+                if !hours.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        strip
+                        range
+                    }
+                    .padding(10)
+                    .glassPane()
+                }
 
-            // CC BY 4.0 asks for this wherever the data is shown, and the
-            // tile is too small to carry it.
-            Text(WeatherService.attribution)
-                .font(WidgetStyle.caption(10))
-                .foregroundStyle(WidgetStyle.secondary)
+                // CC BY 4.0 asks for this wherever the data is shown, and the
+                // tile is too small to carry it.
+                Text(WeatherService.attribution)
+                    .font(WidgetStyle.caption(10))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Data
@@ -68,21 +75,19 @@ struct WeatherDetail: View {
 
     private func now(_ weather: WeatherNow) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: weather.symbolName)
-                .symbolRenderingMode(.multicolor)
-                .font(.system(size: 38))
-                .frame(height: 38)
             VStack(alignment: .leading, spacing: 1) {
+                // The city first, as the system's own weather does: the
+                // number means nothing until you know where it is.
+                Text(city)
+                    .font(WidgetStyle.label(15))
+                    .foregroundStyle(WidgetStyle.primary)
                 temperature(weather.temperatureC)
                 // The hourly layout shows neither the condition nor the city,
                 // so on the shelf this widget is a bare number - both lines
                 // are what the panel is for.
                 Text(weather.condition)
                     .font(WidgetStyle.label(13))
-                    .foregroundStyle(WidgetStyle.primary)
-                Text(city)
-                    .font(WidgetStyle.caption(11))
-                    .foregroundStyle(WidgetStyle.secondary)
+                    .foregroundStyle(.white.opacity(0.8))
             }
             // A city typed in full ("Thiruvananthapuram") truncates rather
             // than pushing the panel's fixed width around.
@@ -97,13 +102,13 @@ struct WeatherDetail: View {
         let reading = Int(converted(celsius).rounded())
         return HStack(alignment: .top, spacing: 0) {
             Text("\(reading)")
-                .font(WidgetStyle.value(34))
+                .font(.system(size: 64, weight: .light))
                 .foregroundStyle(WidgetStyle.primary)
                 .monospacedDigit()
                 .rollingValue(reading)
             Text("°")
-                .font(WidgetStyle.value(24))
-                .foregroundStyle(WidgetStyle.secondary)
+                .font(.system(size: 44, weight: .ultraLight))
+                .foregroundStyle(WidgetStyle.primary)
         }
         .lineLimit(1)
     }

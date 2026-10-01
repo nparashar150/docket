@@ -30,42 +30,73 @@ struct AirDropDetail: View {
     @State private var mode: Discoverability?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            state
-            HStack(spacing: 8) {
-                button("Open AirDrop", fill: Self.blue, label: .white, action: openWindow)
-                button("Settings", fill: nil, label: WidgetStyle.primary, action: openSettings)
+        // The mode is the colour: blue for contacts, amber for everyone,
+        // graphite for off. Rings spread from the corner the way the signal
+        // does, fainter the further they go.
+        DetailCard {
+            ZStack(alignment: .topTrailing) {
+                MeshBackdrop(color: ground)
+                ripples
             }
-            Text("Nearby devices are listed only in Finder's AirDrop window, and the mode is changed in Control Centre or Settings.")
-                .font(WidgetStyle.caption(10))
-                .foregroundStyle(WidgetStyle.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                state
+                HStack(spacing: 8) {
+                    button("Open AirDrop", fill: .white.opacity(0.24), label: .white, action: openWindow)
+                    button("Settings", fill: .white.opacity(0.14), label: .white, action: openSettings)
+                }
+                Text("Nearby devices are listed only in Finder's AirDrop window, and the mode is changed in Control Centre or Settings.")
+                    .font(WidgetStyle.caption(10))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear(perform: read)
+    }
+
+    private var ground: Color {
+        switch mode {
+        case .contacts: Self.blue
+        case .everyone: Color(red: 0.85, green: 0.5, blue: 0.1)
+        case .off, nil: Color(white: 0.32)
+        }
+    }
+
+    /// Four rings from the top corner, the broadcast drawn rather than named.
+    /// Still when nobody can see this Mac: there is nothing going out.
+    private var ripples: some View {
+        ZStack {
+            ForEach(1...4, id: \.self) { ring in
+                Circle()
+                    .strokeBorder(.white.opacity(mode == .off || mode == nil ? 0.04 : 0.16 / Double(ring)),
+                                  lineWidth: 1.5)
+                    .frame(width: CGFloat(ring) * 70, height: CGFloat(ring) * 70)
+            }
+        }
+        .offset(x: 70, y: -70)
     }
 
     // MARK: Pieces
 
     private var state: some View {
         HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(tint.opacity(mode == nil ? 0.18 : 1))
-                .frame(width: 34, height: 34)
+            Circle()
+                .fill(.white.opacity(0.16))
+                .frame(width: 46, height: 46)
                 .overlay {
                     // The tile's stand-in glyph, so the panel and the card it
                     // opened from are recognisably the same widget.
                     Image(systemName: "dot.radiowaves.up.forward")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(mode == nil ? WidgetStyle.secondary : Color.white)
+                        .font(.system(size: 21, weight: .medium))
+                        .foregroundStyle(.white)
                 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(mode?.title ?? "Setting unavailable")
-                    .font(WidgetStyle.label(14))
+                    .font(WidgetStyle.label(18))
                     .foregroundStyle(WidgetStyle.primary)
                 Text(mode?.detail ?? "macOS is not reporting a discoverability mode.")
-                    .font(WidgetStyle.caption(11))
-                    .foregroundStyle(WidgetStyle.secondary)
+                    .font(WidgetStyle.caption(12))
+                    .foregroundStyle(.white.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -74,26 +105,18 @@ struct AirDropDetail: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Filled for the door people came here for, outlined for the other, the
-    /// same pairing the timer panel uses.
-    private func button(_ title: String, fill: Color?, label: Color,
+    /// Solid white for the door people came here for, glass for the other,
+    /// both capsules so they read on any of the three grounds.
+    private func button(_ title: String, fill: Color, label: Color,
                         action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(WidgetStyle.label(13))
                 .foregroundStyle(label)
                 .frame(maxWidth: .infinity)
-                .frame(height: 32)
-                .background {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(fill ?? .clear)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(fill == nil ? Color.primary.opacity(0.14) : .clear,
-                                              lineWidth: 1)
-                        }
-                }
-                .contentShape(.rect)
+                .frame(height: 34)
+                .background(fill, in: .capsule)
+                .contentShape(.capsule)
         }
         .buttonStyle(.plain)
     }
@@ -101,8 +124,6 @@ struct AirDropDetail: View {
     // MARK: Data
 
     private static let blue = Color(hex: "#0A7CFF")
-
-    private var tint: Color { mode?.tint ?? Color.primary }
 
     private func read() {
         guard !context.isPreview else {

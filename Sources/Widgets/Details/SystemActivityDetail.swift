@@ -12,24 +12,29 @@ struct SystemActivityDetail: View {
     var context: WidgetContext
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: Self.gaugeGap) {
-                ForEach(metrics, id: \.self) { gauge($0) }
-            }
-            .frame(maxWidth: .infinity)
+        // Graphite with a violet cast: a machine's insides, dark enough that
+        // the rings' own colours are the only colour in it.
+        DetailCard {
+            MeshBackdrop(color: Color(red: 0.3, green: 0.24, blue: 0.5))
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: Self.gaugeGap) {
+                    ForEach(metrics, id: \.self) { gauge($0) }
+                }
+                .frame(maxWidth: .infinity)
 
-            // The last minute, for the metrics that move. Disk and battery
-            // keep a history that would be a flat line, so they are not
-            // drawn one.
-            if !charted.isEmpty {
-                Divider()
-                history
-            }
+                // The figures each ring leaves out, side by side rather
+                // than a column of rows. Two to a line, since a GiB
+                // reading needs the width.
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
+                                    GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                    ForEach(metrics, id: \.self) { chip($0) }
+                }
 
-            Divider()
-
-            VStack(spacing: 6) {
-                ForEach(metrics, id: \.self) { row($0) }
+                // The last minute, for the metrics that move. Disk and
+                // battery keep a history that would be a flat line, so they
+                // are not drawn one.
+                if !charted.isEmpty { history }
             }
         }
     }
@@ -46,8 +51,10 @@ struct SystemActivityDetail: View {
     /// hours rather than one temperature; this is the same idea pointed
     /// backwards. The rings say where things are, and this says whether they
     /// are on their way up.
+    ///
+    /// To the card's edges and foot, as the ground the readings stand on.
     private var history: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        ZStack(alignment: .topLeading) {
             ZStack {
                 ForEach(charted, id: \.self) { metric in
                     // Absolute, so a CPU idling low sits low and the lines
@@ -56,12 +63,17 @@ struct SystemActivityDetail: View {
                                 filled: charted.count == 1, range: 0...1)
                 }
             }
-            .frame(height: 34)
+            .frame(height: 54)
             .frame(maxWidth: .infinity)
-            Text(span)
-                .font(WidgetStyle.caption(10))
-                .foregroundStyle(WidgetStyle.secondary)
+            .padding(.top, 14)
+            Text(span.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(.white.opacity(0.55))
+                .padding(.horizontal, 16)
         }
+        .padding(.horizontal, -16)
+        .padding(.bottom, -16)
     }
 
     /// Named with the span the buffer actually holds, which is under a minute
@@ -87,10 +99,13 @@ struct SystemActivityDetail: View {
     /// occupying most of the panel while saying one number each. A gauge is
     /// worth its space at the size the eye can take in at a glance; the width
     /// it gives back is what lets the figures and the graph below it fit.
+    ///
+    /// Larger on the card than it was on the form, now that the rows under
+    /// it have become chips and given the height back.
     private var diameter: CGFloat {
         let content = WidgetDetail.width(instance.kind) - 32
         let count = CGFloat(metrics.count)
-        return min(56, (content - Self.gaugeGap * (count - 1)) / count)
+        return min(72, (content - Self.gaugeGap * (count - 1)) / count)
     }
 
     private func gauge(_ metric: Metric) -> some View {
@@ -100,7 +115,7 @@ struct SystemActivityDetail: View {
                                // Neutral, not a dim copy of the arc's own
                                // colour: tinting both made the unfilled part
                                // read as a second, muddier reading.
-                               track: .primary.opacity(0.10),
+                               track: .white.opacity(0.12),
                                diameter: diameter,
                                lineWidth: diameter * 0.11) {
                 percent(value(metric), size: diameter * 0.30)
@@ -137,20 +152,9 @@ struct SystemActivityDetail: View {
 
     // MARK: Detail
 
-    private func row(_ metric: Metric) -> some View {
+    private func chip(_ metric: Metric) -> some View {
         let line = detail(metric)
-        return HStack(spacing: 12) {
-            Text(line.label)
-                .font(WidgetStyle.caption(11))
-                .foregroundStyle(WidgetStyle.secondary)
-            Spacer(minLength: 0)
-            Text(line.value)
-                .font(WidgetStyle.label(11))
-                .monospacedDigit()
-                .foregroundStyle(WidgetStyle.primary)
-                .rollingValue(line.value)
-        }
-        .lineLimit(1)
+        return StatChip(label: line.label, value: line.value)
     }
 
     /// The one fact each gauge leaves out.

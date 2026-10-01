@@ -30,48 +30,78 @@ struct AlarmDetail: View {
         let enabled = instance.config.bool("enabled", default: true)
         let name = instance.config.string("name")
 
-        return VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(next.formatted(.dateTime.hour().minute()))
-                    .font(WidgetStyle.value(44))
-                    .monospacedDigit()
-                    .foregroundStyle(WidgetStyle.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                Text(name.isEmpty ? "Alarm" : name)
-                    .font(WidgetStyle.label(14))
-                    .foregroundStyle(WidgetStyle.primary)
-                    .lineLimit(1)
+        // Night, because that is when an alarm is set for, lit orange only
+        // while it will actually ring.
+        return DetailCard {
+            ZStack(alignment: .topTrailing) {
+                MeshBackdrop(color: Color(red: 0.16, green: 0.14, blue: 0.42))
+                Circle()
+                    .fill(RadialGradient(colors: [Self.orange.opacity(enabled ? 0.45 : 0), .clear],
+                                         center: .center, startRadius: 0, endRadius: 110))
+                    .frame(width: 220, height: 220)
+                    .offset(x: 70, y: -80)
             }
-            // The time itself is never dimmed while off: you set a switch by
-            // knowing what it is set to.
-            .opacity(enabled ? 1 : 0.55)
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(name.isEmpty ? "Alarm" : name)
+                        .font(WidgetStyle.label(14))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .lineLimit(1)
+                    Text(next.formatted(.dateTime.hour().minute()))
+                        .font(.system(size: 60, weight: .light, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(WidgetStyle.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                // The time itself is never hidden while off: you set a switch
+                // by knowing what it is set to.
+                .opacity(enabled ? 1 : 0.55)
 
-            Divider()
+                HStack(spacing: 8) {
+                    StatChip(label: "Rings", value: dayLine(next, now: now))
+                    // A countdown to something that will not ring is a lie,
+                    // so a silenced alarm says so instead.
+                    StatChip(label: "Countdown", value: enabled ? countdown(to: next, from: now) : "Silenced")
+                }
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(dayLine(next, now: now))
-                    .font(WidgetStyle.caption(12))
-                    .foregroundStyle(WidgetStyle.secondary)
-                Spacer(minLength: 8)
-                // A countdown to something that will not ring is a lie, so a
-                // silenced alarm says so instead.
-                Text(enabled ? countdown(to: next, from: now) : "Silenced")
-                    .font(WidgetStyle.caption(12))
-                    .monospacedDigit()
-                    .foregroundStyle(WidgetStyle.secondary)
-                    .rollingValue(Int(next.timeIntervalSince(now)))
-                    .fixedSize()
+                armSwitch(enabled)
             }
-
-            // Filled for arming, because that is the action that makes the
-            // alarm do its job; silencing is outlined for the same reason
-            // Reset is next to Start.
-            ClockPanelButton(title: enabled ? "Silence" : "Turn On",
-                             fill: enabled ? nil : Color(hex: PaletteColor.orange.hex),
-                             action: toggle)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private static let orange = Color(hex: PaletteColor.orange.hex)
+
+    /// The whole row is the switch. Arming is the action that makes the alarm
+    /// do its job, so the lit state is the loud one; silencing is how you
+    /// sleep through something, so it is a switch you have to mean rather
+    /// than a glyph you can brush.
+    private func armSwitch(_ enabled: Bool) -> some View {
+        Button(action: toggle) {
+            HStack(spacing: 10) {
+                Image(systemName: enabled ? "bell.fill" : "bell.slash.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(enabled ? Self.orange : .white.opacity(0.6))
+                    .frame(width: 20)
+                Text(enabled ? "On" : "Silenced")
+                    .font(WidgetStyle.label(13))
+                    .foregroundStyle(.white)
+                Spacer(minLength: 8)
+                Capsule()
+                    .fill(enabled ? Self.orange : Color.white.opacity(0.18))
+                    .frame(width: 42, height: 24)
+                    .overlay(alignment: enabled ? .trailing : .leading) {
+                        Circle().fill(.white).padding(2.5).shadow(radius: 1)
+                    }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .glassPane()
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(enabled ? "Silence alarm" : "Turn alarm on")
     }
 
     // MARK: Data
@@ -97,7 +127,7 @@ struct AlarmDetail: View {
     /// what a 24-hour time on a card leaves you to work out.
     private func dayLine(_ date: Date, now: Date) -> String {
         let day = Calendar.current.isDate(date, inSameDayAs: now) ? "Today" : "Tomorrow"
-        return "\(day) · \(date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))"
+        return "\(day), \(date.formatted(.dateTime.day().month(.abbreviated)))"
     }
 
     private func countdown(to date: Date, from now: Date) -> String {

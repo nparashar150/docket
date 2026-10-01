@@ -18,26 +18,30 @@ struct ClockDetail: View {
         // would sit perfectly still.
         TimelineView(.periodic(from: .now, by: 1)) { tick in
             let now = tick.date
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    ClockPanelTime(now: now, zone: .current, size: 34)
-                    Text(ClockPanelFormat.fullDate(now, zone: .current))
-                        .font(WidgetStyle.caption(12))
-                        .foregroundStyle(WidgetStyle.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
+            // On the sky for this hour, with the sun where it is: the panel
+            // is the time of day before it is a number.
+            DetailCard {
+                SkyBackdrop(date: now, zone: .current)
+            } content: {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ClockPanelTime(now: now, zone: .current, size: 46)
+                        Text(ClockPanelFormat.fullDate(now, zone: .current))
+                            .font(WidgetStyle.label(13))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .padding(.top, 18)
 
-                Divider()
-
-                VStack(spacing: 6) {
-                    ClockPanelRow(label: "Time zone",
-                                  value: ClockPanelFormat.zoneName(.current, at: now))
-                    ClockPanelRow(label: "UTC offset",
-                                  value: ClockPanelFormat.gmt(.current, at: now))
+                    HStack(spacing: 8) {
+                        StatChip(label: "Time zone",
+                                 value: ClockPanelFormat.zoneName(.current, at: now))
+                        StatChip(label: "UTC", value: ClockPanelFormat.gmt(.current, at: now))
+                            .frame(width: 92)
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
