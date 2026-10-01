@@ -3,6 +3,14 @@
 The 0.1.0 entry was written by hand. Everything after it is generated from the
 commits on `main`, which is why the voice changes partway down.
 
+## [0.1.8](https://github.com/nparashar150/dockset/compare/v0.1.7...v0.1.8) (2026-10-01)
+
+
+### Bug Fixes
+
+* the panel's tail is part of its outline, not drawn over it ([2d8fbbb](https://github.com/nparashar150/dockset/commit/2d8fbbb548801ed761bfc80d50f201f28a17aa8e))
+* the panel's tail is part of its outline, not drawn over it ([159763c](https://github.com/nparashar150/dockset/commit/159763cfe68e9f0176db0ca84aecdb68e97864bd))
+
 ## [0.1.7](https://github.com/nparashar150/dockset/compare/v0.1.6...v0.1.7) (2026-10-01)
 
 
