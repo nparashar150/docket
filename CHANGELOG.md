@@ -3,6 +3,15 @@
 The 0.1.0 entry was written by hand. Everything after it is generated from the
 commits on `main`, which is why the voice changes partway down.
 
+## [0.1.9](https://github.com/nparashar150/dockset/compare/v0.1.8...v0.1.9) (2026-10-01)
+
+
+### Bug Fixes
+
+* a removed widget takes its open panel with it, and the note and watchlist panels fit in ([9f7d80f](https://github.com/nparashar150/dockset/commit/9f7d80f818db4af8b24783e73a662f22cef5b411))
+* a slow player is waited out, not turned into a Connect button ([f956b38](https://github.com/nparashar150/dockset/commit/f956b38f666ff09468dfe293c3fcdc20974b7203))
+* players keep syncing when slow, and panels close with their widget ([eb5af34](https://github.com/nparashar150/dockset/commit/eb5af3430c1814fae86c210268689b2333c07f75))
+
 ## [0.1.8](https://github.com/nparashar150/dockset/compare/v0.1.7...v0.1.8) (2026-10-01)
 
 
