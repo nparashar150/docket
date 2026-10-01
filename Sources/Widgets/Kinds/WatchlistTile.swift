@@ -56,8 +56,9 @@ struct WatchlistTile: View {
                     Text(symbol)
                         .font(WidgetStyle.label(11))
                         .foregroundStyle(WidgetStyle.primary)
+                    // The shelf's value style, level with every other tile.
                     Text(quote?.priceText ?? "-")
-                        .font(WidgetStyle.value(18))
+                        .font(.system(size: 19, weight: .semibold))
                         .foregroundStyle(WidgetStyle.primary)
                         .monospacedDigit()
                     Text(quote?.percentText ?? "")

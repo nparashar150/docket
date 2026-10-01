@@ -91,10 +91,12 @@ struct TimeProgressTile: View {
 
     private var barsLayout: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                periodLabel(13, prominent: true)
-                Spacer(minLength: 4)
-                percentText(15)
+            // The shelf's two type styles: the figure as the value, the span
+            // as the caption, on one line above the run of bars.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                percentText(19)
+                periodLabel(12)
+                Spacer(minLength: 0)
             }
             bars
         }
@@ -105,29 +107,22 @@ struct TimeProgressTile: View {
         return HStack(spacing: 4.0 / 3.0) {
             ForEach(0..<Self.barCount, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 0.85, style: .continuous)
-                    .fill(index < filled ? WidgetStyle.primary : WidgetStyle.primary.opacity(0.14))
+                    // Softened from full ink: a run of 52 solid white bars was
+                    // the brightest thing on the shelf.
+                    .fill(WidgetStyle.primary.opacity(index < filled ? 0.62 : 0.12))
                     .frame(width: 5.0 / 3.0)
             }
         }
-        .frame(height: 19)
+        .frame(height: 16)
     }
 
     private var ringLayout: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .stroke(WidgetStyle.primary.opacity(0.12), lineWidth: 6)
-                Circle()
-                    .trim(from: 0, to: fraction)
-                    .stroke(WidgetStyle.primary,
-                            style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
-            .frame(width: 38, height: 38)
-
+        // The ring in the badge every tile leads with.
+        HStack(spacing: 10) {
+            TileBadge { TileRing(progress: fraction) }
             VStack(alignment: .leading, spacing: 1) {
-                percentText(18)
-                periodLabel(11)
+                percentText(19)
+                periodLabel(12)
             }
             Spacer(minLength: 0)
         }
@@ -233,7 +228,7 @@ struct TimeProgressTile: View {
             Text("%")
                 .foregroundStyle(WidgetStyle.secondary)
         }
-        .font(.system(size: size, weight: .bold))
+        .font(.system(size: size, weight: .semibold))
         .monospacedDigit()
         .lineLimit(1)
     }

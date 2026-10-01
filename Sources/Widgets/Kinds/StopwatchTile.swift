@@ -27,12 +27,22 @@ struct StopwatchTile: View {
                     controls(state, size: 9)
                 }
             } else {
-                HStack(spacing: 6) {
+                HStack(spacing: instance.expanded ? 10 : 6) {
+                    // The badge only where there is room for it: the compact
+                    // card is 120pt, and a dial there would leave the count
+                    // no width at all.
+                    if instance.expanded {
+                        TileBadge {
+                            Image(systemName: state.running ? "stopwatch.fill" : "stopwatch")
+                                .font(.system(size: 17, weight: .regular))
+                                .foregroundStyle(WidgetStyle.primary.opacity(0.85))
+                        }
+                    }
                     // The readout takes the width so the glyphs stay pinned to
                     // the trailing edge: the count ticks every second and
                     // widens to h:mm:ss past the hour, and a control that slid
                     // along with it would be a moving target.
-                    readout(state, value: 21, caption: 12, alignment: .leading)
+                    TileReading(value: Self.format(state.elapsed), caption: state.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     controls(state, size: 11)
                 }

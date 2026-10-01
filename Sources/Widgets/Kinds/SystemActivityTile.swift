@@ -61,13 +61,15 @@ struct SystemActivityTile: View {
         HStack(spacing: 0) {
             ForEach(metrics, id: \.self) { metric in
                 VStack(spacing: 3) {
-                    percent(value(metric), size: 24)
+                    // The shelf's value and caption styles, so these figures
+                    // sit level with every other tile's reading.
+                    percent(value(metric), size: 19)
                     HStack(spacing: 5) {
                         Circle()
                             .fill(metric.color)
-                            .frame(width: 7, height: 7)
+                            .frame(width: 6, height: 6)
                         Text(metric.label)
-                            .font(WidgetStyle.caption(13))
+                            .font(.system(size: 12))
                             .foregroundStyle(WidgetStyle.secondary)
                     }
                 }
@@ -293,12 +295,12 @@ struct SystemActivityTile: View {
         let whole = Int((min(max(value, 0), 1) * 100).rounded())
         HStack(spacing: 0) {
             Text("\(whole)")
-                .font(.system(size: size, weight: .bold))
+                .font(.system(size: size, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(WidgetStyle.primary)
                 .rollingValue(whole)
             Text("%")
-                .font(.system(size: size, weight: .bold))
+                .font(.system(size: size, weight: .semibold))
                 .foregroundStyle(WidgetStyle.secondary)
         }
     }

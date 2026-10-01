@@ -28,9 +28,13 @@ struct ShortcutTile: View {
                     caption(name, size: 11)
                 }
             } else {
-                HStack(spacing: 9) {
+                // The glyph is the badge here: it is both the shortcut's mark
+                // and the one thing on the tile that acts.
+                HStack(spacing: 10) {
                     glyph(running: running, name: name, size: 12)
-                    caption(name, size: 14)
+                    TileReading(value: name.isEmpty ? "Choose" : name,
+                                caption: running ? "Running" : "Shortcut",
+                                valueSize: 15)
                     Spacer(minLength: 0)
                 }
             }

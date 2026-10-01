@@ -43,39 +43,21 @@ struct AlarmTile: View {
                         .opacity(enabled ? 1 : 0.45)
                     }
                 } else {
-                    // The switch sits level with the block it acts on rather
-                    // than in the top corner: a card is 58pt tall, and a glyph
-                    // pinned to the top of it reads as a badge printed on the
-                    // tile instead of something to press.
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(next.formatted(.dateTime.hour().minute()))
-                                .font(WidgetStyle.value(24))
-                                .monospacedDigit()
-                                .foregroundStyle(WidgetStyle.primary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(name.isEmpty ? "Alarm" : name)
-                                    .font(WidgetStyle.label(14))
-                                    .foregroundStyle(WidgetStyle.primary)
-                                    .lineLimit(1)
-                                    // The countdown is fixed and the switch
-                                    // takes 30, so a long name gives way
-                                    // rather than truncating at "Morning al…".
-                                    .minimumScaleFactor(0.8)
-                                // A countdown to something that will not ring
-                                // is a lie.
-                                Text(enabled ? countdownCaption(to: next) : "Off")
-                                    .font(WidgetStyle.caption(13))
-                                    .monospacedDigit()
-                                    .foregroundStyle(WidgetStyle.secondary)
-                                    .fixedSize()
-                            }
-                        }
-                        .opacity(enabled ? 1 : 0.45)
+                    // The badge is the switch. A bell in the badge and a
+                    // second bell as the control said the same thing twice in
+                    // 148pt, so the one mark both shows the state and is what
+                    // you press to change it.
+                    HStack(spacing: 10) {
+                        switchBadge(enabled: enabled)
+                        // A countdown to something that will not ring is a lie.
+                        TileReading(value: next.formatted(.dateTime.hour().minute()),
+                                    // When, not what: the name and the time
+                                    // left together only fitted by shrinking
+                                    // to a size no other tile uses. The name
+                                    // is in the panel.
+                                    caption: enabled ? countdownCaption(to: next) : "Off")
+                            .opacity(enabled ? 1 : 0.45)
                         Spacer(minLength: 0)
-                        toggleGlyph(enabled: enabled, size: 15)
                     }
                 }
             }
@@ -104,6 +86,33 @@ struct AlarmTile: View {
         .accessibilityLabel(
             "\(enabled ? "Turn off" : "Turn on") alarm at \(nextOccurrence.formatted(.dateTime.hour().minute()))"
         )
+    }
+
+    /// The bell in the tile's badge, pressable where the shelf is live.
+    ///
+    /// Neutral when silenced and a muted orange when armed: the state reads
+    /// before the glyph does, without an orange disc shouting from the card.
+    @ViewBuilder
+    private func switchBadge(enabled: Bool) -> some View {
+        let badge = TileBadge {
+            Image(systemName: enabled ? "alarm.fill" : "alarm.slash.fill")
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(enabled
+                                 ? Color(hex: PaletteColor.orange.hex).mix(with: WidgetStyle.primary, by: 0.55)
+                                 : WidgetStyle.secondary)
+        }
+        if context.isPreview {
+            badge
+        } else {
+            Button(action: toggle) { badge }
+                .buttonStyle(.plain)
+                // The badge's own square and no more, so the rest of the card
+                // still belongs to the shelf.
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityLabel(
+                    "\(enabled ? "Turn off" : "Turn on") alarm at \(nextOccurrence.formatted(.dateTime.hour().minute()))"
+                )
+        }
     }
 
     private func toggle() {

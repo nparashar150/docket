@@ -37,19 +37,24 @@ struct NetworkActivityTile: View {
 
     private func row(_ symbol: String, _ bytesPerSecond: Double, _ tint: Color) -> some View {
         let rate = formatted(bytesPerSecond)
+        // One run of text, so the value and its unit shrink together. As two
+        // views the unit was the one cut short, and "999 K..." said nothing.
+        // No badge: 90pt of usable width holds the two rates or a badge, not
+        // both, and the rates are the reading.
         return HStack(spacing: 5) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(tint)
-            Text(rate.value)
-                .font(.system(size: 16, weight: .bold))
-                .monospacedDigit()
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tint.opacity(0.85))
+            (Text(rate.value)
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(WidgetStyle.primary)
-            Text(rate.unit)
-                .font(WidgetStyle.caption(14))
-                .foregroundStyle(WidgetStyle.secondary)
+             + Text(" \(rate.unit)")
+                .font(.system(size: 11))
+                .foregroundStyle(WidgetStyle.secondary))
+                .monospacedDigit()
         }
         .lineLimit(1)
+        .minimumScaleFactor(0.6)
     }
 
     private var chart: some View {

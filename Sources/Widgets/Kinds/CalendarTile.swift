@@ -89,11 +89,13 @@ struct CalendarTile: View {
                     // two-line block.
                     .padding(.top, 4)
                 VStack(alignment: .leading, spacing: 1) {
+                    // The shelf's value and caption styles, a step down for a
+                    // title that is words rather than a figure.
                     Text(event.title)
-                        .font(WidgetStyle.label(13))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(WidgetStyle.primary)
                     Text(event.detail)
-                        .font(WidgetStyle.caption(11))
+                        .font(.system(size: 12))
                         .foregroundStyle(WidgetStyle.secondary)
                 }
                 Spacer(minLength: 0)
@@ -199,9 +201,11 @@ struct CalendarTile: View {
     /// every point it is not using.
     private func dateBlock(weekday: CGFloat, day: CGFloat) -> some View {
         VStack(spacing: 0) {
+            // Grey, not the calendar's red: colour on the shelf is kept to
+            // small marks, and the dots beside each event already carry it.
             Text(context.now.formatted(.dateTime.weekday(.abbreviated)).uppercased())
                 .font(WidgetStyle.label(weekday))
-                .foregroundStyle(calendarAccent)
+                .foregroundStyle(WidgetStyle.secondary)
             Text(context.now.formatted(.dateTime.day()))
                 .font(WidgetStyle.value(day))
                 .foregroundStyle(WidgetStyle.primary)
@@ -321,6 +325,8 @@ private enum CalendarTileStore {
 
 /// The widget's accent, for the date block and for an event whose calendar has
 /// no colour of its own.
+
+/// The dot an event gets when its calendar has no colour of its own.
 private let calendarAccent = Color(hex: WidgetCatalog.accentHex(.calendar) ?? PaletteColor.orange.hex)
 
 /// One entry, flattened off its `EKEvent` when the day is read.

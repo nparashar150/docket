@@ -46,15 +46,15 @@ struct ClockReadout: View {
             if vertical {
                 column
             } else if expanded {
-                HStack(spacing: 15) {
-                    AnalogClockFace(now: now, zone: zone)
-                    VStack(alignment: .leading, spacing: 2) {
-                        time
-                        text(caption)
+                // The face in the badge every tile leads with, so a clock and
+                // the tile beside it share one left edge for their pictures.
+                HStack(spacing: 10) {
+                    TileBadge {
+                        AnalogClockFace(now: now, zone: zone, diameter: 26)
                     }
+                    TileReading(value: ClockFormat.time(now, zone: zone), caption: caption)
                     Spacer(minLength: 0)
                 }
-                .padding(.leading, 4)
             } else {
                 VStack(spacing: 2) {
                     time

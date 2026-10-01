@@ -58,8 +58,8 @@ struct WeatherTile: View {
             } else {
                 switch layout {
                 case "hourly": hourlyStrip
-                case "conditions": wide(caption: weather?.condition ?? "-", size: 12, lines: 2)
-                default: wide(caption: placeCaption, size: 14, lines: 1)
+                case "conditions": wide(caption: weather?.condition ?? "-")
+                default: wide(caption: placeCaption)
                 }
             }
         }
@@ -87,19 +87,14 @@ struct WeatherTile: View {
 
     // MARK: - Layouts
 
-    /// Symbol left, temperature and a caption stacked on the right.
-    private func wide(caption: String, size: CGFloat, lines: Int) -> some View {
-        HStack(spacing: 9) {
-            icon(size: 30)
-            VStack(alignment: .leading, spacing: 1) {
-                temperature(weather?.temperatureC, size: 22)
-                Text(caption)
-                    .font(WidgetStyle.caption(size))
-                    .foregroundStyle(WidgetStyle.secondary)
-                    .lineLimit(lines)
-                    .minimumScaleFactor(0.7)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    /// The shelf's badge and reading: the condition's symbol in the square,
+    /// the temperature over a caption beside it. The caption shrinks to one
+    /// line like every other tile's, so a long condition reads smaller rather
+    /// than pushing a second line out of the card.
+    private func wide(caption: String) -> some View {
+        HStack(spacing: 10) {
+            TileBadge { icon(size: 19) }
+            TileReading(value: weather.map { degrees($0.temperatureC) } ?? "--°", caption: caption)
             Spacer(minLength: 0)
         }
     }
@@ -108,7 +103,7 @@ struct WeatherTile: View {
     /// back to the single reading while the forecast is still empty.
     @ViewBuilder private var hourlyStrip: some View {
         if hours.isEmpty {
-            wide(caption: placeCaption, size: 14, lines: 1)
+            wide(caption: placeCaption)
         } else {
             // Four ahead, not five, because the first cell is now.
             //
@@ -135,7 +130,8 @@ struct WeatherTile: View {
                             .foregroundStyle(WidgetStyle.primary)
                             .monospacedDigit()
                         Image(systemName: weather.symbolName)
-                            .symbolRenderingMode(.multicolor)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(WidgetStyle.primary)
                             .font(.system(size: 15))
                         Text(degrees(weather.temperatureC))
                             .font(WidgetStyle.label(12))
@@ -156,7 +152,8 @@ struct WeatherTile: View {
                             .foregroundStyle(WidgetStyle.secondary)
                             .monospacedDigit()
                         Image(systemName: hour.symbolName)
-                            .symbolRenderingMode(.multicolor)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(WidgetStyle.primary)
                             .font(.system(size: 15))
                         Text(degrees(hour.temperatureC))
                             .font(WidgetStyle.label(12))
@@ -233,8 +230,11 @@ struct WeatherTile: View {
     // MARK: - Pieces
 
     private func icon(size: CGFloat) -> some View {
+        // Hierarchical white rather than multicolour: a yellow sun and blue
+        // rain were the loudest marks on a neutral shelf.
         Image(systemName: weather?.symbolName ?? "cloud.sun.fill")
-            .symbolRenderingMode(.multicolor)
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(WidgetStyle.primary)
             .font(.system(size: size))
             .frame(height: size)
     }
