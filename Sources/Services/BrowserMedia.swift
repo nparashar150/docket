@@ -286,6 +286,14 @@ public final class BrowserMedia {
         // starts collecting them within a few seconds.
         guard Date().timeIntervalSince(lastCommand) >= Self.commandGrace else { return }
         timeouts += 1
+        // Same rule as MusicService: a browser that has answered before has
+        // granted access, so a run of slow probes (a heavy page, a Mac just
+        // woken) is waited out with a growing pause rather than turned into
+        // a Connect button and a stop to syncing.
+        if Self.hasAnswered {
+            lastProbe = Date().addingTimeInterval(min(30, 2 * Double(timeouts)))
+            return
+        }
         guard timeouts >= 3 else { return }
         blocked = true
         needsPermission = true
@@ -293,6 +301,13 @@ public final class BrowserMedia {
         // paused track forever *and* hid the Connect button, which is the
         // only thing that clears `blocked` - there was no way back.
         track = nil
+    }
+
+    /// Whether a browser has ever run one of Docket's probes. Kept across
+    /// launches, because the consent it stands for is too.
+    private static var hasAnswered: Bool {
+        get { UserDefaults.standard.bool(forKey: "browser.hasAnswered") }
+        set { UserDefaults.standard.set(newValue, forKey: "browser.hasAnswered") }
     }
 
     /// Downloads the cover, at most once per URL.
@@ -421,6 +436,8 @@ public final class BrowserMedia {
         defer { polling = false }
         needsPermission = poll.denied
         cached = poll.tab
+
+        if poll.track != nil, !poll.denied { Self.hasAnswered = true }
 
         if var found = poll.track {
             // Hold what was asked for until the page agrees.

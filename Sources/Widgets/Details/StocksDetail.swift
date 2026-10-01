@@ -208,27 +208,45 @@ struct StocksDetail: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// A ticker as a watchlist app shows one: who it is on the left, how
+    /// its day went as a line in the middle, and where it stands on the right.
+    ///
+    /// It was the ticker, a price and a pill on an otherwise empty pane, which
+    /// said less than the tile it opened from. The name and the day's line are
+    /// what the panel has the room for.
     private func row(_ symbol: String, quote: StockQuote?) -> some View {
-        HStack(spacing: 10) {
-            Text(symbol)
-                .font(WidgetStyle.label(13))
-                .foregroundStyle(WidgetStyle.primary)
-            Spacer(minLength: 8)
-            Text(quote?.priceText ?? "-")
-                .font(WidgetStyle.value(15))
-                .foregroundStyle(WidgetStyle.primary)
-                .monospacedDigit()
-                .rollingValue(quote?.price ?? 0)
-            Text(quote?.percentText ?? "-")
-                .font(WidgetStyle.label(11))
-                .foregroundStyle(.white)
-                .monospacedDigit()
-                .rollingValue(quote?.changePercent ?? 0)
-                // Fixed so the signed percentages line up as a column instead
-                // of ragging against the varying price widths.
-                .frame(width: 58)
-                .padding(.vertical, 3)
-                .background(accent(quote).opacity(0.5), in: .capsule)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(symbol)
+                    .font(WidgetStyle.label(14))
+                    .foregroundStyle(WidgetStyle.primary)
+                // The service falls back to the ticker when it has no name,
+                // and repeating it would read as a rendering bug.
+                if let name = quote?.name, name != symbol {
+                    Text(name)
+                        .font(WidgetStyle.caption(11))
+                        .foregroundStyle(WidgetStyle.secondary)
+                        .minimumScaleFactor(0.6)
+                }
+            }
+            .frame(width: 92, alignment: .leading)
+
+            DayLine(samples: quote.map(series) ?? [], tint: accent(quote))
+                .frame(height: 26)
+                .frame(maxWidth: .infinity)
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(quote?.priceText ?? "-")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(WidgetStyle.primary)
+                    .monospacedDigit()
+                    .rollingValue(quote?.price ?? 0)
+                Text(quote?.percentText ?? "-")
+                    .font(WidgetStyle.label(10))
+                    .foregroundStyle(accent(quote))
+                    .monospacedDigit()
+                    .rollingValue(quote?.changePercent ?? 0)
+            }
         }
         .lineLimit(1)
         .minimumScaleFactor(0.75)
@@ -263,5 +281,38 @@ struct StocksDetail: View {
         .font(WidgetStyle.caption(10))
         .foregroundStyle(WidgetStyle.secondary)
         .lineLimit(2)
+    }
+}
+
+/// The day's closes as a thin line with a faint fill under it, for a row.
+///
+/// Not `DitherChart`: that is drawn to be the ground a single price stands
+/// on, and three of them stacked in a list read as noise. A list wants a line.
+private struct DayLine: View {
+    var samples: [Double]
+    var tint: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            if samples.count >= 2, let low = samples.min(), let high = samples.max() {
+                let span = max(high - low, .ulpOfOne)
+                let points = samples.enumerated().map { index, value in
+                    CGPoint(x: geo.size.width * CGFloat(index) / CGFloat(samples.count - 1),
+                            y: geo.size.height * (1 - CGFloat((value - low) / span)))
+                }
+                let line = Path { $0.addLines(points) }
+                ZStack {
+                    Path { path in
+                        path.addLines(points)
+                        path.addLine(to: CGPoint(x: geo.size.width, y: geo.size.height))
+                        path.addLine(to: CGPoint(x: 0, y: geo.size.height))
+                        path.closeSubpath()
+                    }
+                    .fill(LinearGradient(colors: [tint.opacity(0.22), tint.opacity(0)],
+                                         startPoint: .top, endPoint: .bottom))
+                    line.stroke(tint, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                }
+            }
+        }
     }
 }
