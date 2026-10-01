@@ -197,9 +197,37 @@ public final class MusicService {
         // the tile asking for consent it already had.
         guard Date().timeIntervalSince(lastCommand) >= Self.commandGrace else { return }
         timeouts += 1
+
+        // A player that has answered Docket before has been granted access,
+        // and consent, once given, is not silently withdrawn: revoking it in
+        // System Settings comes back as a -1743 on the next real attempt,
+        // which the probe already reports as such. So a stall from a player
+        // that has answered is slowness - a big library, a Mac just woken -
+        // and the answer is to wait and ask again, never to stop syncing and
+        // show a Connect button for permission that is already there. That
+        // is what happened: three slow probes and the tile asked to connect
+        // and stopped updating until it was clicked.
+        if Self.hasAnswered {
+            // Waits a little longer each time, to half a minute, so a player
+            // that is struggling is not hammered while it recovers.
+            lastProbe = Date().addingTimeInterval(min(30, 2 * Double(timeouts)))
+            return
+        }
+
+        // Never answered: a player that has not been asked for consent does
+        // not refuse, it hangs, because a background agent's consent prompt
+        // is never shown. Only then is Connect the thing that can fix it.
         guard timeouts >= 3 else { return }
         blocked = true
         needsAutomationPermission = true
+    }
+
+    /// Whether a player has ever answered one of Docket's probes.
+    ///
+    /// Kept across launches, because the permission it stands for is too.
+    private static var hasAnswered: Bool {
+        get { UserDefaults.standard.bool(forKey: "music.hasAnswered") }
+        set { UserDefaults.standard.set(newValue, forKey: "music.hasAnswered") }
     }
 
 
@@ -208,6 +236,7 @@ public final class MusicService {
         defer { polling = false }
         timeouts = 0            // it answered, so it is not refusing
         needsAutomationPermission = result.needsPermission
+        if result.sawRunningPlayer, !result.needsPermission { Self.hasAnswered = true }
         hasPlayer = result.sawRunningPlayer
 
         guard var track = result.track else {
