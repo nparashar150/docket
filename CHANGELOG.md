@@ -3,6 +3,20 @@
 The 0.1.0 entry was written by hand. Everything after it is generated from the
 commits on `main`, which is why the voice changes partway down.
 
+## [0.1.7](https://github.com/nparashar150/dockset/compare/v0.1.6...v0.1.7) (2026-10-01)
+
+
+### Features
+
+* every panel is one graphite card with its reading on it ([cf709da](https://github.com/nparashar150/dockset/commit/cf709da868d76414eb14e24c1861bfe043bae3b9))
+* every tile leads with the same badge and reads the same way ([163fdd6](https://github.com/nparashar150/dockset/commit/163fdd6f0e851e112df8ffe56aaf8b73a1b86996))
+* graphite card panels, one tile structure, and the shelf stays out for the library ([10ac5a9](https://github.com/nparashar150/dockset/commit/10ac5a907b57850d74b5f0f092f3a9018ab3839c))
+
+
+### Bug Fixes
+
+* the shelf stays out while the widget library is open ([545987f](https://github.com/nparashar150/dockset/commit/545987fe87cab555c09762e5b635af419d9dface))
+
 ## [0.1.6](https://github.com/nparashar150/dockset/compare/v0.1.5...v0.1.6) (2026-09-30)
 
 
